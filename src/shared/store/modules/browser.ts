@@ -5,6 +5,11 @@ import constants from '../../../renderer/mainBrowserWindow/constants';
 import timeUtil from '../../../renderer/lib/time-util';
 import urlUtil from '../../../renderer/lib/url-util';
 
+let ipcRenderer: Electron.IpcRenderer | null = null;
+if (process.type === 'renderer') {
+  ipcRenderer = require('electron').ipcRenderer;
+}
+
 /* tslint:disable:object-shorthand-properties-first */
 
 const state: Lulumi.Store.State = {
@@ -30,9 +35,14 @@ const state: Lulumi.Store.State = {
 
 /* tslint:disable-next-line:max-line-length */
 function createTabObject(state: Lulumi.Store.State, wid: number, openUrl: string | null = null): Lulumi.Store.TabObject {
+  let viewId: number = -1;
+  if (process.type === 'renderer' && ipcRenderer) {
+    viewId = ipcRenderer.sendSync('create-browser-view', openUrl);
+  }
   return {
     webContentsId: -1,
     id: 0,
+    viewId,
     index: 0,
     windowId: wid,
     highlighted: false,
@@ -111,8 +121,10 @@ const mutations = {
     const tabs = state.tabs.filter(tab => tab.windowId === windowId);
 
     if (tabs.length > tabIndex) {
-
-      state.tabs.forEach((tab, index) => {
+      if (process.type === 'renderer' && ipcRenderer) {
+        ipcRenderer.send('destroy-browser-view', state.tabs[tabsIndex].viewId);
+      }
+      state.tabs.forEach((_, index) => {
         Vue.set(state.tabs[index], 'highlighted', false);
         Vue.set(state.tabs[index], 'active', false);
       });
@@ -245,6 +257,10 @@ const mutations = {
     const index: number = state.tabs.findIndex(tab => (tab.id === tabId));
     Vue.set(state.tabs[index], 'highlighted', true);
     Vue.set(state.tabs[index], 'active', true);
+
+    if (process.type === 'renderer' && ipcRenderer) {
+      ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
+    }
   },
   // tab handlers
   [types.DID_START_LOADING](state: Lulumi.Store.State, payload) {

@@ -3,11 +3,7 @@ div
   transition(name="notification")
     #notification(v-show="showNotification && isActive")
       notification(:windowWebContentsId="windowWebContentsId")
-  webview(partition="persist:webview",
-          plugins,
-          :element-loading-text="$t('tab.loading')",
-          ref="webview",
-          :class="isActive ? 'active' : 'hidden'")
+  div.webview
   .findinpage-bar(ref="findinpageBar", v-show="!hidden && isActive")
     input(ref="findinpageInput", :placeholder="$t('tab.findInPage.placeholder')")
     span(ref="findinpageCount")
@@ -26,7 +22,7 @@ import Event from '../../../api/event';
 
 import Notification from './Notification.vue';
 
-const resizeSensor = require('css-element-queries/src/ResizeSensor');
+// const resizeSensor = require('css-element-queries/src/ResizeSensor');
 
 @Component({
   props: {
@@ -50,6 +46,10 @@ const resizeSensor = require('css-element-queries/src/ResizeSensor');
       type: Number,
       required: true,
     },
+    viewId: {
+      type: Number,
+      required: true,
+    },
   },
   components: {
     Notification,
@@ -66,6 +66,7 @@ export default class Tab extends Vue {
   windowWebContentsId: number;
   tabIndex: number;
   tabId: number;
+  viewId: number;
 
   findinpage: Lulumi.Tab.FindInPageObject;
 
@@ -86,17 +87,15 @@ export default class Tab extends Vue {
   }
 
   navigateTo(url) {
-    if (this.$refs.webview) {
-      this.$nextTick(() => {
-        (this.$refs.webview as Electron.WebviewTag)
-          .setAttribute('src', urlUtil.getUrlFromInput(url));
-      });
-    }
+    this.$electron.ipcRenderer.send('navigate-to', {
+      url: urlUtil.getUrlFromInput(url),
+      viewId: this.viewId,
+    });
   }
-  webviewHandler(self, fnName) {
-    return (event) => {
-      if (self.$parent[fnName]) {
-        self.$parent[fnName](event, this.tabIndex, this.tabId);
+  webviewHandler(fnName) {
+    return (event, origEvent, ...data) => {
+      if (this.$parent[fnName]) {
+        this.$parent[fnName](origEvent, this.tabIndex, this.tabId, ...data);
       }
     };
   }
@@ -121,13 +120,10 @@ export default class Tab extends Vue {
     }
   }
 
-  mounted() {
-    const webview = this.$refs.webview as Electron.WebviewTag;
-
-    const webviewEvents = {
+  beforeMount() {
+    const browserViewEvents = {
       'did-start-loading': 'onDidStartLoading',
       'load-commit': 'onLoadCommit',
-      'page-title-set': 'onPageTitleSet',
       'dom-ready': 'onDomReady',
       'did-frame-finish-load': 'onDidFrameFinishLoad',
       'page-favicon-updated': 'onPageFaviconUpdated',
@@ -150,8 +146,28 @@ export default class Tab extends Vue {
       'did-navigate-in-page': 'onDidNavigateInPage',
     };
 
-    Object.keys(webviewEvents).forEach((key) => {
-      webview.addEventListener(key, this.webviewHandler(this, webviewEvents[key]));
+    const ipc = this.$electron.ipcRenderer;
+
+    Object.keys(browserViewEvents).forEach((key) => {
+      ipc.on(key, this.webviewHandler(browserViewEvents[key]));
+    });
+  }
+  mounted() {
+    const webContents = this.$electron.remote.BrowserView.fromId(this.viewId).webContents;
+    const ipc = this.$electron.ipcRenderer;
+
+    ipc.on('reset-zoom', () => {
+      webContents.setZoomLevel(0);
+    });
+    ipc.on('zoom-in', () => {
+      webContents.getZoomLevel((zoomLevel) => {
+        webContents.setZoomLevel(zoomLevel + 0.5);
+      });
+    });
+    ipc.on('zoom-out', () => {
+      webContents.getZoomLevel((zoomLevel) => {
+        webContents.setZoomLevel(zoomLevel - 0.5);
+      });
     });
 
     this.findinpage = {
@@ -160,7 +176,7 @@ export default class Tab extends Vue {
       previous: this.$refs.findinpagePreviousMatch,
       next: this.$refs.findinpageNextMatch,
       endButton: this.$refs.findinpageEnd,
-      activeWebview: webview,
+      activeWebContents: webContents,
       start: () => {
         this.findinpage.counter.textContent = '';
         this.hidden = false;
@@ -170,7 +186,7 @@ export default class Tab extends Vue {
         });
 
         if ((this.findinpage.input as HTMLInputElement).value) {
-          this.requestId = this.findinpage.activeWebview.findInPage(
+          this.requestId = this.findinpage.activeWebContents.findInPage(
             (this.findinpage.input as HTMLInputElement).value);
         }
       },
@@ -178,10 +194,10 @@ export default class Tab extends Vue {
         this.hidden = true;
 
         this.$nextTick(() => {
-          if (this.findinpage.activeWebview) {
-            this.findinpage.activeWebview.stopFindInPage('keepSelection');
+          if (this.findinpage.activeWebContents) {
+            this.findinpage.activeWebContents.stopFindInPage('keepSelection');
             if (this.findinpage.input === document.activeElement) {
-              this.findinpage.activeWebview.focus();
+              this.findinpage.activeWebContents.focus();
             }
           }
         });
@@ -194,14 +210,14 @@ export default class Tab extends Vue {
 
     this.findinpage.input.addEventListener('input', (event) => {
       if ((event.target as HTMLInputElement).value) {
-        this.requestId = this.findinpage.activeWebview.findInPage(
+        this.requestId = this.findinpage.activeWebContents.findInPage(
           (event.target as HTMLInputElement).value);
       }
     });
 
     this.findinpage.input.addEventListener('keypress', (event) => {
       if (event.keyCode === 13) {
-        this.requestId = this.findinpage.activeWebview.findInPage(
+        this.requestId = this.findinpage.activeWebContents.findInPage(
           (this.findinpage.input as HTMLInputElement).value, {
             forward: true,
             findNext: true,
@@ -211,7 +227,7 @@ export default class Tab extends Vue {
 
     this.findinpage.previous.addEventListener('click', () => {
       if ((this.findinpage.input as HTMLInputElement).value) {
-        this.requestId = this.findinpage.activeWebview.findInPage(
+        this.requestId = this.findinpage.activeWebContents.findInPage(
           (this.findinpage.input as HTMLInputElement).value, {
             forward: false,
             findNext: true,
@@ -222,13 +238,13 @@ export default class Tab extends Vue {
     this.findinpage.next.addEventListener('click', () => {
       if ((this.findinpage.input as HTMLInputElement).value) {
         this.requestId
-          = this.findinpage.activeWebview.findInPage(
+          = this.findinpage.activeWebContents.findInPage(
             (this.findinpage.input as HTMLInputElement).value,
             { forward: true, findNext: true });
       }
     });
 
-    webview.addEventListener('found-in-page', (event) => {
+    webContents.on('found-in-page', (event: Electron.FoundInPageEvent) => {
       if (event.result.requestId === this.requestId) {
         // for this.$tc pluralization
         let match;
@@ -255,6 +271,7 @@ export default class Tab extends Vue {
         * register the resize event on nav element to dynamically adjust
         * the height of webview element
         */
+      /*
       new resizeSensor(nav, () => {
         webview.style.height
           = `calc(100vh - ${nav.clientHeight}px)`;
@@ -265,6 +282,7 @@ export default class Tab extends Vue {
       webview.style.height
         = `calc(100vh - ${nav.clientHeight}px)`;
       findinpageBar.style.top = `${nav.clientHeight}px`;
+      */
 
       // navigate
       this.navigateTo(this.tab.url);
@@ -289,7 +307,7 @@ export default class Tab extends Vue {
   opacity: 0
 }
 
-webview {
+.webview {
   height: 0px;
   width: 100vw;
   outline: none;

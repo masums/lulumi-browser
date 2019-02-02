@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   app,
+  BrowserView,
   BrowserWindow,
   dialog,
   ipcMain,
@@ -20,6 +21,7 @@ import localshortcut from 'electron-localshortcut';
 import menu from './lib/menu';
 import promisify from './lib/promisify';
 import request from './lib/request';
+import webContentsInit from './lib/web-contents-init';
 
 /* tslint:disable:no-console */
 
@@ -71,6 +73,7 @@ const { default: mainStore } = require('../shared/store/mainStore');
 mainStore.register(storagePath, swipeGesture);
 const store: Store<any> = mainStore.getStore();
 const windows: Electron.BrowserWindow[] = mainStore.getWindows();
+const browserViews: Electron.BrowserView[] = mainStore.getBrowserViews();
 let windowCount: number = 0;
 
 // ./api/lulumi-extension.ts
@@ -153,27 +156,6 @@ function createWindow(options?: Electron.BrowserWindowConstructorOptions, callba
   });
 
   menu.init();
-
-  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    // webPreferences.nativeWindowOpen = true;
-    webPreferences.enableBlinkFeatures = 'OverlayScrollbars';
-
-    const backgroundRegExp = new RegExp('^lulumi-extension://.+/\.*background\.*.html$');
-    if (params.src.startsWith('lulumi-extension://')) {
-      if (params.src.match(backgroundRegExp)) {
-        webPreferences.preload = path.join(constants.lulumiPreloadPath, 'extension-preload.js');
-      } else {
-        webPreferences.preload = path.join(constants.lulumiPreloadPath, 'popup-preload.js');
-      }
-    } else {
-      if (process.env.TEST_ENV !== 'e2e') {
-        webPreferences.contextIsolation = true;
-      }
-      webPreferences.preload = path.join(constants.lulumiPreloadPath, 'webview-preload.js');
-    }
-  });
-
-  mainWindow.on('close', () => (mainWindow.removeAllListeners('will-attach-webview')));
 
   mainWindow.on('closed', () => {
     if (setLanguage) {
@@ -400,6 +382,51 @@ ipcMain.on('set-browser-window-title', (event, data) => {
   }
 });
 
+ipcMain.on('create-browser-view', (event, url) => {
+  const window: BrowserWindow = BrowserWindow.fromWebContents(event.sender);
+  const viewId = webContentsInit(window.id, url);
+
+  window.webContents.executeJavaScript(`
+    // initialization
+    window.addEventListener('resize', () => {
+      require('electron').ipcRenderer.send('set-browser-view-bounds', {
+        viewId: ${viewId},
+        x: 0,
+        y: document.getElementById('nav').getClientRects()[0].height,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    });
+  `);
+  browserViews[viewId] = BrowserView.fromId(viewId);
+  event.returnValue = viewId;
+});
+
+ipcMain.on('destroy-browser-view', (event, viewId) => {
+  browserViews[viewId].destroy();
+  delete browserViews[viewId];
+});
+
+ipcMain.on('focus-browser-view', (event: Electron.Event, viewId) => {
+  BrowserWindow.fromWebContents(event.sender).setBrowserView(browserViews[viewId]);
+  browserViews[viewId].webContents.focus();
+});
+
+ipcMain.on('set-browser-view-bounds', (event, data) => {
+  BrowserView.fromId(data.viewId).setBounds({
+    x: data.x,
+    y: data.y,
+    width: data.width,
+    height: data.height - data.y + 1,
+  });
+});
+
+// make certain browserView to navigate to a page
+ipcMain.on('navigate-to', (event, data) => {
+  const view = BrowserView.fromId(data.viewId);
+  view.webContents.loadURL(data.url);
+});
+
 // show the item on host
 ipcMain.on('show-item-in-folder', (event, path) => {
   if (path) {
@@ -624,8 +651,8 @@ ipcMain.on('register-local-commands', (event: Electron.Event) => {
   Object.keys(windows).forEach((key) => {
     const id = parseInt(key, 10);
     const window = windows[id];
-    Object.keys(lulumiExtension.manifestMap).forEach((manifest) => {
-      lulumiExtension.registerLocalCommands(window, lulumiExtension.manifestMap[manifest]);
+    Object.keys(globalObject.manifestMap).forEach((manifest) => {
+      lulumiExtension.registerLocalCommands(window, globalObject.manifestMap[manifest]);
     });
   });
   event.returnValue = true;

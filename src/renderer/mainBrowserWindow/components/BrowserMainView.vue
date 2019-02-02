@@ -10,6 +10,7 @@ div
       :windowWebContentsId="windowWebContentsId",
       :tabIndex="index",
       :tabId="tab.id",
+      :viewId="tab.viewId",
       :ref="`tab-${index}`",
       :key="`tab-${tab.id}`")
   #footer
@@ -106,7 +107,7 @@ export default class BrowserMainView extends Vue {
     return this.$store.getters.certificates;
   }
 
-  getWebView(tabIndex?: number): Electron.WebviewTag {
+  getBrowserView(tabIndex?: number): Electron.BrowserView {
     let index: number | undefined = tabIndex;
     if (index === undefined) {
       if (this.currentTabIndex === undefined) {
@@ -115,7 +116,7 @@ export default class BrowserMainView extends Vue {
         index = this.currentTabIndex;
       }
     }
-    return this.$refs[`tab-${index}`][0].$refs.webview;
+    return this.$electron.remote.BrowserView.fromId(this.$refs[`tab-${index}`][0].viewId);
   }
   getTab(tabIndex?: number): Tab {
     let index: number | undefined = tabIndex;
@@ -273,33 +274,38 @@ export default class BrowserMainView extends Vue {
   }
   // tabHandlers
   onDidStartLoading(event: Electron.Event, tabIndex: number, tabId: number): void {
-    const webview = this.getWebView(tabIndex);
+    const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('didStartLoading', {
       tabId,
       tabIndex,
-      url: webview.getAttribute('src'),
-      webContentsId: webview.getWebContents().id,
+      url: webContents.getURL(),
+      webContentsId: webContents.id,
       windowId: this.windowId,
     });
     if ((process.env.NODE_ENV !== 'testing')) {
       this.onUpdatedEvent.emit(
         tabId,
         {
-          url: webview.getAttribute('src'),
+          url: webContents.getURL(),
         },
         this.getTabObject(tabIndex));
     }
     this.onCommitted.emit({
       frameId: 0,
       parentFrameId: -1,
-      processId: this.getWebView(tabIndex).getWebContents().getOSProcessId(),
+      processId: webContents.getOSProcessId(),
       tabId: this.getTabObject(tabIndex).id,
       timeStamp: Date.now(),
-      url: webview.getAttribute('src'),
+      url: webContents.getURL(),
     });
   }
-  onLoadCommit(event: Electron.LoadCommitEvent, tabIndex: number, tabId: number): void {
-    if (event.isMainFrame) {
+  onLoadCommit(
+    event: Electron.LoadCommitEvent,
+    tabIndex: number,
+    tabId: number,
+    url: string,
+    isMainFrame: boolean): void {
+    if (isMainFrame) {
       const navbar = (this.$refs.navbar as Navbar);
       navbar.showUrl(event.url, tabId);
       this.$store.dispatch('loadCommit', {
@@ -309,49 +315,40 @@ export default class BrowserMainView extends Vue {
       });
     }
   }
-  onPageTitleSet(event: Electron.PageTitleUpdatedEvent, tabIndex: number, tabId: number): void {
-    const webview = this.getWebView(tabIndex);
+  onDomReady(event: Electron.Event, tabIndex: number, tabId: number): void {
+    const webContents = this.getBrowserView(tabIndex).webContents;
+    const url = webContents.getURL();
+    const parsedURL = urlPackage.parse(url, true);
+
     this.$electron.ipcRenderer.send('set-browser-window-title', {
-      title: webview.getTitle(),
+      title: webContents.getTitle(),
       windowId: this.windowId,
     });
     this.$store.dispatch('pageTitleSet', {
       tabId,
       tabIndex,
-      title: webview.getTitle(),
+      title: webContents.getTitle(),
       windowId: this.windowId,
     });
-    if ((process.env.NODE_ENV !== 'testing')) {
-      this.onUpdatedEvent.emit(
-        tabId,
-        {
-          title: webview.getTitle(),
-        },
-        this.getTabObject(tabIndex));
-    }
-  }
-  onDomReady(event: Electron.Event, tabIndex: number, tabId: number): void {
-    const webview = this.getWebView(tabIndex);
-    const url = webview.getURL();
-    const parsedURL = urlPackage.parse(url, true);
+
     if (parsedURL.protocol === 'chrome:' && parsedURL.hostname === 'pdf-viewer') {
       if (this.pdfViewer === 'pdf-viewer') {
         this.$store.dispatch('domReady', {
           tabId,
           tabIndex,
-          canGoBack: webview.canGoBack(),
-          canGoForward: webview.canGoForward(),
+          canGoBack: webContents.canGoBack(),
+          canGoForward: webContents.canGoForward(),
           windowId: this.windowId,
         });
       } else {
-        webview.getWebContents().downloadURL(parsedURL.query.src as string);
+        webContents.downloadURL(parsedURL.query.src as string);
       }
     } else {
       this.$store.dispatch('domReady', {
         tabId,
         tabIndex,
-        canGoBack: webview.canGoBack(),
-        canGoForward: webview.canGoForward(),
+        canGoBack: webContents.canGoBack(),
+        canGoForward: webContents.canGoForward(),
         windowId: this.windowId,
       });
     }
@@ -359,78 +356,99 @@ export default class BrowserMainView extends Vue {
       url,
       frameId: 0,
       parentFrameId: -1,
-      processId: this.getWebView(tabIndex).getWebContents().getOSProcessId(),
+      processId: webContents.getOSProcessId(),
       tabId: this.getTabObject(tabIndex).id,
       timeStamp: Date.now(),
     });
+    if ((process.env.NODE_ENV !== 'testing')) {
+      this.onUpdatedEvent.emit(
+        tabId,
+        {
+          title: webContents.getTitle(),
+        },
+        this.getTabObject(tabIndex));
+    }
   }
   onDidFrameFinishLoad(
     event: Electron.DidFrameFinishLoadEvent, tabIndex: number, tabId: number): void {
     if (event.isMainFrame) {
-      const webview = this.getWebView(tabIndex);
+      const webContents = this.getBrowserView(tabIndex).webContents;
       this.$store.dispatch('didFrameFinishLoad', {
         tabId,
         tabIndex,
-        url: webview.getURL(),
-        canGoBack: webview.canGoBack(),
-        canGoForward: webview.canGoForward(),
+        url: webContents.getURL(),
+        canGoBack: webContents.canGoBack(),
+        canGoForward: webContents.canGoForward(),
         windowId: this.windowId,
       });
     }
   }
   onPageFaviconUpdated(
-    event: Electron.PageFaviconUpdatedEvent, tabIndex: number, tabId: number): void {
+    event: Electron.PageFaviconUpdatedEvent,
+    tabIndex: number,
+    tabId: number,
+    favicons: string[]): void {
     this.$store.dispatch('pageFaviconUpdated', {
       tabId,
       tabIndex,
-      url: event.favicons[0],
+      url: favicons[0],
       windowId: this.windowId,
     });
     if ((process.env.NODE_ENV !== 'testing')) {
       this.onUpdatedEvent.emit(
         tabId,
         {
-          favIconUrl: event.favicons[0],
+          favIconUrl: favicons[0],
         },
         this.getTabObject(tabIndex));
     }
   }
   onDidStopLoading(event: Electron.Event, tabIndex: number, tabId: number): void {
-    const webview = this.getWebView(tabIndex);
+    const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('didStopLoading', {
       tabId,
       tabIndex,
-      url: webview.getURL(),
-      canGoBack: webview.canGoBack(),
-      canGoForward: webview.canGoForward(),
+      url: webContents.getURL(),
+      canGoBack: webContents.canGoBack(),
+      canGoForward: webContents.canGoForward(),
       windowId: this.windowId,
     });
   }
-  onDidFailLoad(event: Electron.DidFailLoadEvent, tabIndex: number, tabId: number): void {
+  onDidFailLoad(
+    event: Electron.DidFailLoadEvent,
+    tabIndex: number,
+    tabId: number,
+    errorCode: number,
+    errorDescription: string,
+    validatedURL: string,
+    isMainFrame: boolean,
+    frameProcessId: number,
+    frameRoutingId: number): void {
+    const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('didFailLoad', {
       tabId,
       tabIndex,
-      isMainFrame: event.isMainFrame,
+      isMainFrame,
       windowId: this.windowId,
     });
     const appPath = process.env.NODE_ENV === 'development'
       ? path.join(process.cwd(), 'src/helper/pages')
       : path.join(this.$electron.remote.app.getAppPath(), 'dist');
-    let errorCode = event.errorCode;
+    let ec = errorCode;
     let errorPage = `file://${appPath}/error/index.html`;
 
-    if (errorCode === -501) {
-      const hostname = urlUtil.getHostname(event.validatedURL);
+    if (ec === -501) {
+      const hostname = urlUtil.getHostname(validatedURL);
       if (hostname) {
         const certificateObject = this.certificates[hostname];
         if (certificateObject) {
-          errorCode = certificateObject.errorCode;
+          ec = certificateObject.errorCode;
         }
       }
     }
-    errorPage += `?ec=${encodeURIComponent(errorCode.toString())}`;
-    errorPage += `&url=${encodeURIComponent((event.target as Electron.WebviewTag).getURL())}`;
-    if (errorCode !== -3 && event.validatedURL === (event.target as Electron.WebviewTag).getURL()) {
+    errorPage += `?ec=${encodeURIComponent(ec.toString())}`;
+    errorPage += `&url=${encodeURIComponent(webContents.getURL())}`;
+    if (ec !== -3 && validatedURL === webContents.getURL()) {
       this.getTab(tabIndex).navigateTo(
         `${errorPage}`);
     }
@@ -444,20 +462,21 @@ export default class BrowserMainView extends Vue {
       }
     }
   }
-  onUpdateTargetUrl(event: Electron.UpdateTargetUrlEvent, tabIndex: number, tabId: number): void {
+  onUpdateTargetUrl(
+    event: Electron.UpdateTargetUrlEvent, tabIndex: number, tabId: number, url: string): void {
     this.$store.dispatch('updateTargetUrl', {
       tabId,
       tabIndex,
-      url: event.url,
+      url,
       windowId: this.windowId,
     });
   }
   onMediaStartedPlaying(event: Electron.Event, tabIndex: number, tabId: number): void {
-    const webview = this.getWebView(tabIndex);
+    const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('mediaStartedPlaying', {
       tabId,
       tabIndex,
-      isAudioMuted: webview.isAudioMuted(),
+      isAudioMuted: webContents.isAudioMuted(),
       windowId: this.windowId,
     });
   }
@@ -469,8 +488,9 @@ export default class BrowserMainView extends Vue {
     });
   }
   onToggleAudio(event: Electron.Event, tabIndex: number, muted: boolean): void {
+    const webContents = this.getBrowserView(tabIndex).webContents;
     const tabObject = this.getTabObject(tabIndex);
-    this.getWebView(tabIndex).setAudioMuted(muted);
+    webContents.setAudioMuted(muted);
     this.$store.dispatch('toggleAudio', {
       tabIndex,
       muted,
@@ -490,19 +510,20 @@ export default class BrowserMainView extends Vue {
     const nav = this.$el.querySelector('#nav') as HTMLDivElement;
     if (nav) {
       nav.style.display = 'none';
-      this.getWebView().style.height = '100vh';
+      // this.getBrowserView().style.height = '100vh';
     }
     this.$electron.remote.BrowserWindow.fromId(this.windowId).setFullScreen(true);
     this.htmlFullscreen = true;
   }
   onLeaveHtmlFullScreen(): void {
     if (this.htmlFullscreen) {
+      const webContents = this.getBrowserView().webContents;
       const nav = this.$el.querySelector('#nav') as HTMLDivElement;
       if (nav) {
         nav.style.display = 'block';
-        this.getWebView().style.height = `calc(100vh - ${nav.clientHeight}px)`;
+        // this.getBrowserView().style.height = `calc(100vh - ${nav.clientHeight}px)`;
         const jsScript = 'document.webkitExitFullscreen()';
-        this.getWebView().executeJavaScript(jsScript, true);
+        webContents.executeJavaScript(jsScript, true);
       }
       this.$electron.remote.BrowserWindow.fromId(this.windowId).setFullScreen(false);
       if (is.macos) {
@@ -511,29 +532,36 @@ export default class BrowserMainView extends Vue {
       this.htmlFullscreen = false;
     }
   }
-  onNewWindow(event: Electron.NewWindowEvent, tabIndex: number): void {
-    const disposition: string = event.disposition;
+  onNewWindow(
+    event: Electron.NewWindowEvent,
+    tabIndex: number,
+    url: string,
+    frameName: string,
+    disposition: string,
+    options: any,
+    additionalFeatures: string[],
+    referrer: Electron.Referrer): void {
     if (disposition === 'new-window') {
       event.preventDefault();
       (event as any).newGuest = this.$electron.ipcRenderer.sendSync('new-lulumi-window', {
-        url: event.url,
+        url,
         follow: true,
       });
     } else if (disposition === 'foreground-tab') {
-      this.onNewTab(this.windowId, event.url, true);
+      this.onNewTab(this.windowId, url, true);
     } else if (disposition === 'background-tab') {
-      this.onNewTab(this.windowId, event.url, false);
+      this.onNewTab(this.windowId, url, false);
     } else {
       // tslint:disable-next-line
       console.log(`NOTIMPLEMENTED: ${disposition}`);
     }
     /*
     this.onCreatedNavigationTarget.emit({
+      url,
       sourceTabId: this.getTabObject(tabIndex).id,
-      sourceProcessId: this.getWebView(tabIndex).getWebContents().getOSProcessId(),
+      sourceProcessId: this.getBrowserView(tabIndex).getWebContents().getOSProcessId(),
       sourceFrameId: 0,
       timeStamp: Date.now(),
-      url: event.url,
       tabId: this.$store.getters.pid,
     });
     */
@@ -547,13 +575,15 @@ export default class BrowserMainView extends Vue {
 
     if (leftSwipeArrow !== null && rightSwipeArrow !== null) {
       if (this.trackingFingers) {
+        const webContents = this.getBrowserView().webContents;
+
         this.deltaX += event.deltaX;
         this.deltaY += event.deltaY;
 
         if (Math.abs(this.deltaY) > Math.abs(this.deltaX)) {
           this.hnorm = 0;
-        } else if ((this.deltaX < 0 && !this.getWebView().canGoBack())
-          || (this.deltaX > 0 && !this.getWebView().canGoForward())) {
+        } else if ((this.deltaX < 0 && !webContents.canGoBack())
+          || (this.deltaX > 0 && !webContents.canGoForward())) {
           this.hnorm = 0;
           this.deltaX = 0;
         } else {
@@ -681,11 +711,13 @@ export default class BrowserMainView extends Vue {
 
     if (leftSwipeArrow !== null && rightSwipeArrow !== null) {
       if (this.trackingFingers && this.isSwipeOnEdge) {
+        const webContents = this.getBrowserView().webContents;
+
         if (this.hnorm <= -1) {
-          this.getWebView().goBack();
+          webContents.goBack();
         }
         if (this.hnorm >= 1) {
-          this.getWebView().goForward();
+          webContents.goForward();
         }
       }
       leftSwipeArrow.classList.add('returning');
@@ -715,10 +747,18 @@ export default class BrowserMainView extends Vue {
       this.$electron.remote.BrowserWindow.fromId(this.windowId).setFullScreen(false);
     }
   }
-  onContextMenu(event: Electron.Event): void {
-    this.onWebviewContextMenu(event);
+  onContextMenu(
+    event: Electron.Event,
+    tabIndex: number,
+    tabId: number,
+    params: Electron.ContextMenuParams): void {
+    this.onWebviewContextMenu(params);
   }
-  onWillNavigate(event: Electron.WillNavigateEvent, tabIndex: number, tabId: number): void {
+  onWillNavigate(
+    event: Electron.WillNavigateEvent,
+    tabIndex: number,
+    tabId: number,
+    url: string): void {
     this.$store.dispatch('clearPageAction', {
       tabId,
       tabIndex,
@@ -726,21 +766,27 @@ export default class BrowserMainView extends Vue {
     });
     this.getTab(tabIndex).onMessageEvent.listeners = [];
     this.onBeforeNavigate.emit({
+      url,
       tabId: this.getTabObject(tabIndex).id,
-      url: event.url,
       frameId: 0,
       parentFrameId: -1,
       timeStamp: Date.now(),
     });
   }
-  onDidNavigate(event: Electron.DidNavigateEvent, tabIndex: number): void {
+  onDidNavigate(
+    event: Electron.DidNavigateEvent,
+    tabIndex: number,
+    url: string,
+    httpResponseCode: number,
+    httpStatusText: string): void {
+    const webContents = this.getBrowserView().webContents;
     this.onCompleted.emit({
+      url,
       frameId: 0,
       parentFrameId: -1,
-      processId: this.getWebView(tabIndex).getWebContents().getOSProcessId(),
+      processId: webContents.getOSProcessId(),
       tabId: this.getTabObject(tabIndex).id,
       timeStamp: Date.now(),
-      url: event.url,
     });
   }
   onGetSearchEngineProvider(event: Electron.Event, webContentsId: number): void {
@@ -891,40 +937,43 @@ export default class BrowserMainView extends Vue {
     this.getTab().navigateTo(this.homepage);
   }
   onClickBack(): void {
+    const webContents = this.getBrowserView().webContents;
     if (this.getTabObject().error) {
-      this.getWebView().goToOffset(-2);
+      webContents.goToOffset(-2);
     } else {
-      this.getWebView().goBack();
+      webContents.goBack();
     }
   }
   onClickForward(): void {
-    this.getWebView().goForward();
+    const webContents = this.getBrowserView().webContents;
+    webContents.goForward();
   }
   onClickStop(): void {
-    this.getWebView().stop();
+    const webContents = this.getBrowserView().webContents;
+    webContents.stop();
   }
   onClickRefresh(): void {
-    const webview = this.getWebView();
+    const webContents = this.getBrowserView().webContents;
     const url = urlUtil.getUrlIfError(this.tab.url);
-    if (webview.getURL() === url) {
-      webview.reload();
+    if (webContents.getURL() === url) {
+      webContents.reload();
     } else {
-      webview.loadURL(url);
+      webContents.loadURL(url);
     }
   }
   onClickForceRefresh(): void {
-    const webview = this.getWebView();
+    const webContents = this.getBrowserView().webContents;
     const url = urlUtil.getUrlIfError(this.tab.url);
-    if (webview.getURL() === url) {
-      webview.reloadIgnoringCache();
+    if (webContents.getURL() === url) {
+      webContents.reloadIgnoringCache();
     } else {
-      webview.loadURL(url);
+      webContents.loadURL(url);
     }
   }
   onClickViewSource(): void {
-    const webview = this.getWebView();
+    const webContents = this.getBrowserView().webContents;
     const url = urlUtil.getUrlIfError(this.tab.url);
-    if (webview.getURL() === url) {
+    if (webContents.getURL() === url) {
       const sourceUrl = urlUtil.getViewSourceUrlFromUrl(url);
       if (sourceUrl !== null) {
         this.onNewTab(this.windowId, sourceUrl, true);
@@ -932,25 +981,24 @@ export default class BrowserMainView extends Vue {
     }
   }
   onClickToggleDevTools(): void {
-    const webview = this.getWebView();
+    const webContents = this.getBrowserView().webContents;
     const url = urlUtil.getUrlIfError(this.tab.url);
-    if (webview.getURL() === url) {
-      webview.getWebContents().openDevTools({ mode: 'bottom' });
+    if (webContents.getURL() === url) {
+      webContents.openDevTools({ mode: 'bottom' });
     }
   }
   onClickJavaScriptPanel(): void {
-    const webview = this.getWebView();
-    const webContent = webview.getWebContents();
-    if (webContent.isDevToolsOpened()) {
-      webContent.closeDevTools();
+    const webContents = this.getBrowserView().webContents;
+    if (webContents.isDevToolsOpened()) {
+      webContents.closeDevTools();
     } else {
-      webContent.once('devtools-opened', () => {
-        const dtwc = webContent.devToolsWebContents;
+      webContents.once('devtools-opened', () => {
+        const dtwc = webContents.devToolsWebContents;
         if (dtwc) {
           dtwc.executeJavaScript('DevToolsAPI.showPanel("console")');
         }
       });
-      webContent.openDevTools();
+      webContents.openDevTools();
     }
   }
   onEnterUrl(url: string): void {
@@ -995,13 +1043,13 @@ export default class BrowserMainView extends Vue {
   }
   // onClickBackContextMenu
   async onClickBackContextMenu(): Promise<void> {
+    /*
     const currentWindow: Electron.BrowserWindow | null
       = this.$electron.remote.BrowserWindow.fromId(this.windowId);
     if (currentWindow) {
       const { Menu, MenuItem } = this.$electron.remote;
       const menu = new Menu();
-      const webview = this.getWebView();
-      const webContents: any = webview.getWebContents();
+      const webContents = this.getBrowserView().webContents;
       const navbar = document.getElementById('browser-navbar');
       const goBack = document.getElementById('browser-navbar__goBack');
 
@@ -1016,12 +1064,12 @@ export default class BrowserMainView extends Vue {
             try {
               menu.append(new MenuItem({
                 label: history[urls[i]].title,
-                click: () => webview.goToIndex(i),
+                click: () => webContents.goToIndex(i),
               }));
             } catch (e) {
               menu.append(new MenuItem({
                 label: urls[i],
-                click: () => webview.goToIndex(i),
+                click: () => webContents.goToIndex(i),
               }));
             }
           }
@@ -1040,16 +1088,17 @@ export default class BrowserMainView extends Vue {
         }
       }
     }
+    */
   }
   // onClickForwardContextMenu
   async onClickForwardContextMenu(): Promise<void> {
+    /*
     const currentWindow: Electron.BrowserWindow | null
       = this.$electron.remote.BrowserWindow.fromId(this.windowId);
     if (currentWindow) {
       const { Menu, MenuItem } = this.$electron.remote;
       const menu = new Menu();
-      const webview = this.getWebView();
-      const webContents: any = webview.getWebContents();
+      const webContents = this.getBrowserView().webContents;
       const navbar = document.getElementById('browser-navbar');
       const goForward = document.getElementById('browser-navbar__goForward');
 
@@ -1064,12 +1113,12 @@ export default class BrowserMainView extends Vue {
             try {
               menu.append(new MenuItem({
                 label: history[urls[i]].title,
-                click: () => webview.goToIndex(i),
+                click: () => webContents.goToIndex(i),
               }));
             } catch (e) {
               menu.append(new MenuItem({
                 label: urls[i],
-                click: () => webview.goToIndex(i),
+                click: () => webContents.goToIndex(i),
               }));
             }
           }
@@ -1088,6 +1137,7 @@ export default class BrowserMainView extends Vue {
         }
       }
     }
+    */
   }
   // onNavContextMenu
   onNavContextMenu(event: Electron.Event): void {
@@ -1245,7 +1295,7 @@ export default class BrowserMainView extends Vue {
     }
   }
   // onWebviewContextMenu
-  onWebviewContextMenu(event: Electron.Event): void {
+  onWebviewContextMenu(params: Electron.ContextMenuParams): void {
     const currentWindow: Electron.BrowserWindow | null
       = this.$electron.remote.BrowserWindow.fromId(this.windowId);
     if (currentWindow) {
@@ -1253,9 +1303,8 @@ export default class BrowserMainView extends Vue {
       const menu = new Menu();
       const clipboard = this.$electron.clipboard;
 
-      const webview = this.getWebView();
+      const webContents = this.getBrowserView().webContents;
       const tab = this.getTabObject();
-      const params: Electron.ContextMenuParams = (event as any).params;
       const editFlags = params.editFlags;
 
       const registerExtensionContextMenus = (menu) => {
@@ -1306,7 +1355,7 @@ export default class BrowserMainView extends Vue {
             label: this.$t(
               'webview.contextMenu.lookUp', { selectionText: params.selectionText }) as string,
             click: () => {
-              webview.showDefinitionForSelection();
+              webContents.showDefinitionForSelection();
             },
           }));
 
@@ -1333,14 +1382,14 @@ export default class BrowserMainView extends Vue {
         menu.append(new MenuItem({
           label: this.$t('webview.contextMenu.undo') as string,
           click: () => {
-            webview.undo();
+            webContents.undo();
           },
           enabled: editFlags.canUndo,
         }));
         menu.append(new MenuItem({
           label: this.$t('webview.contextMenu.redo') as string,
           click: () => {
-            webview.redo();
+            webContents.redo();
           },
           enabled: editFlags.canRedo,
         }));
@@ -1384,8 +1433,7 @@ export default class BrowserMainView extends Vue {
         menu.append(new MenuItem({
           label: this.$t('webview.contextMenu.openLinkInNewWindow') as string,
           click: () => {
-            const webContent = webview.getWebContents();
-            webContent.executeJavaScript(`window.open('${params.linkURL}')`);
+            webContents.executeJavaScript(`window.open('${params.linkURL}')`);
           },
         }));
 
@@ -1483,7 +1531,7 @@ export default class BrowserMainView extends Vue {
       registerExtensionContextMenus(menu);
 
       const url = urlUtil.getUrlIfError(tab.url);
-      if (webview.getURL() === url) {
+      if (webContents.getURL() === url) {
         const sourceUrl = urlUtil.getViewSourceUrlFromUrl(url);
         if (sourceUrl !== null) {
           menu.append(new MenuItem({
@@ -1499,7 +1547,7 @@ export default class BrowserMainView extends Vue {
       menu.append(new MenuItem({
         label: this.$t('webview.contextMenu.inspectElement') as string,
         click: () => {
-          webview.inspectElement(params.x, params.y);
+          webContents.inspectElement(params.x, params.y);
         },
       }));
 
@@ -1549,21 +1597,6 @@ export default class BrowserMainView extends Vue {
 
     const ipc = this.$electron.ipcRenderer;
 
-    ipc.on('reset-zoom', () => {
-      this.getWebView().getWebContents().setZoomLevel(0);
-    });
-    ipc.on('zoom-in', () => {
-      const webContents = this.getWebView().getWebContents();
-      webContents.getZoomLevel((zoomLevel) => {
-        webContents.setZoomLevel(zoomLevel + 0.5);
-      });
-    });
-    ipc.on('zoom-out', () => {
-      const webContents = this.getWebView().getWebContents();
-      webContents.getZoomLevel((zoomLevel) => {
-        webContents.setZoomLevel(zoomLevel - 0.5);
-      });
-    });
     ipc.on('go-back', () => {
       this.onClickBack();
     });

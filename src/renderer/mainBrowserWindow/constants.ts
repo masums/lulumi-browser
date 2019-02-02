@@ -57,6 +57,7 @@ const tabConfig: Lulumi.Store.TabConfig = {
   dummyTabObject: {
     webContentsId: -1,
     id: -1,
+    viewId: -1,
     index: -1,
     windowId: -1,
     highlighted: false,

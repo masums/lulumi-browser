@@ -21,6 +21,7 @@ const isDarwin: boolean = is.macos;
 const isWindows: boolean = is.windows;
 
 const windows: Electron.BrowserWindow[] = [];
+const browserViews: Electron.BrowserView[] = [];
 
 const broadcastMutations = (store) => {
   store.subscribe((mutation) => {
@@ -427,4 +428,5 @@ export default {
   saveLulumiState,
   bumpWindowIds,
   getWindows: () => windows,
+  getBrowserViews: () => browserViews,
 };

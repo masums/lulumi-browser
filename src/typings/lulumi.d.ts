@@ -82,6 +82,7 @@ declare namespace Lulumi {
     export interface TabObject {
       webContentsId: number; // Id of the corresponding webContents
       id: number; // 頁籤的標識符。(某些狀況可能會沒有 id)
+      viewId: number; // BrowserView's id
       index: number; // 頁籤在所在窗口中的索引，從 0 開始。
       windowId: number; // 頁籤所在窗口的標識符。
       openerTabId?: number; // 使用哪個已存在的頁籤打開指定的網址。
@@ -238,7 +239,7 @@ declare namespace Lulumi {
       previous: HTMLElement;
       next: HTMLElement;
       endButton: HTMLElement;
-      activeWebview: Electron.WebviewTag;
+      activeWebContents: Electron.WebContents;
       start(): void;
       end(): void;
     }
