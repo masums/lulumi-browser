@@ -165,7 +165,7 @@ function createWindow(options?: Electron.BrowserWindowConstructorOptions, callba
       // save app-state every 5 mins
       lulumiStateSaveHandler = setInterval(lulumiStateSave, 1000 * 60 * 5);
 
-       // reset the setLanguage variable
+      // reset the setLanguage variable
       if (setLanguage) {
         setLanguage = false;
       }
