@@ -658,7 +658,7 @@ ipcMain.on('register-local-commands', (event: Electron.Event) => {
       lulumiExtension.registerLocalCommands(window, globalObject.manifestMap[manifest]);
     });
   });
-  event.returnValue = true;
+  event.sender.send('registered-local-commands');
 });
 
 ipcMain.on('fetch-search-suggestions',
