@@ -125,6 +125,7 @@ declare namespace Lulumi {
       favIconUrl: string | null;
       label: string;
       time: string;
+      mtime: number;
     }
     export interface DownloadItem {
       getReceivedBytes: number;
@@ -143,6 +144,7 @@ declare namespace Lulumi {
       title: string | VueI18n.LocaleMessageArray | null;
       url: string;
       favIconUrl: string | null;
+      mtime: number;
     }
     export interface CertificateObject {
       certificate: Electron.Certificate;

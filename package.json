@@ -109,6 +109,7 @@
     "karma-webpack": "4.0.0-rc.5",
     "launch-editor-middleware": "^2.2.1",
     "less": "^3.9.0",
+    "mime-types": "^2.1.21",
     "less-loader": "^4.1.0",
     "mini-css-extract-plugin": "^0.5.0",
     "mocha": "^5.2.0",
