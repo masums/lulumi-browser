@@ -283,7 +283,8 @@ export default class BrowserMainView extends Vue {
       webContentsId: webContents.id,
       windowId: this.windowId,
     });
-    if ((process.env.NODE_ENV !== 'testing')) {
+    if (!(process.env.NODE_ENV === 'test'
+      && process.env.TEST_ENV === 'unit')) {
       this.onUpdatedEvent.emit(
         tabId,
         {
@@ -361,7 +362,8 @@ export default class BrowserMainView extends Vue {
       tabId: this.getTabObject(tabIndex).id,
       timeStamp: Date.now(),
     });
-    if ((process.env.NODE_ENV !== 'testing')) {
+    if (!(process.env.NODE_ENV === 'test'
+      && process.env.TEST_ENV === 'unit')) {
       this.onUpdatedEvent.emit(
         tabId,
         {
@@ -395,7 +397,8 @@ export default class BrowserMainView extends Vue {
       url: favicons[0],
       windowId: this.windowId,
     });
-    if ((process.env.NODE_ENV !== 'testing')) {
+    if (!(process.env.NODE_ENV === 'test'
+      && process.env.TEST_ENV === 'unit')) {
       this.onUpdatedEvent.emit(
         tabId,
         {
@@ -498,7 +501,8 @@ export default class BrowserMainView extends Vue {
       tabId: tabObject.id,
       windowId: this.windowId,
     });
-    if ((process.env.NODE_ENV !== 'testing')) {
+    if (!(process.env.NODE_ENV === 'test'
+      && process.env.TEST_ENV === 'unit')) {
       this.onUpdatedEvent.emit(
         tabObject.id,
         {
@@ -875,7 +879,8 @@ export default class BrowserMainView extends Vue {
           windowId: this.windowId,
           tabsOrder: (this.$refs.tabs as Tabs).sortable.toArray(),
         });
-        if ((process.env.NODE_ENV !== 'testing')) {
+        if (!(process.env.NODE_ENV === 'test'
+        && process.env.TEST_ENV === 'unit')) {
           this.onCreatedEvent.emit(this.getTabObject(this.currentTabIndex));
         }
       },

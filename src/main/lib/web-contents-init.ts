@@ -53,9 +53,7 @@ export default (windowId: number, url: string): number => {
       webPreferences['preload'] = path.join(constants.lulumiPreloadPath, 'popup-preload.js');
     }
   } else {
-    if (process.env.TEST_ENV !== 'e2e') {
-      webPreferences['contextIsolation'] = true;
-    }
+    webPreferences['contextIsolation'] = true;
     webPreferences['preload'] = path.join(constants.lulumiPreloadPath, 'webview-preload.js');
     webPreferences['partition'] = 'persist:webview';
     webPreferences['plugins'] = true;

@@ -27,6 +27,7 @@ import webContentsInit from './lib/web-contents-init';
 
 const { openProcessManager } = require('electron-process-manager');
 
+const isTesting = process.env.NODE_ENV === 'test';
 const startTime = new Date().getTime();
 const globalObject = global as Lulumi.API.GlobalObject;
 
@@ -43,11 +44,11 @@ if (!gotTheLock) {
   app.exit();
 }
 
-let shuttingDown: boolean = (process.env.NODE_ENV === 'testing' || process.env.TEST_ENV === 'e2e');
+let shuttingDown: boolean = isTesting;
 
 if (process.env.NODE_ENV === 'development') {
   app.setPath('userData', constants.devUserData);
-} else if (process.env.NODE_ENV === 'testing' || process.env.TEST_ENV === 'e2e') {
+} else if (isTesting) {
   app.setPath('userData', constants.testUserData);
 }
 
@@ -164,7 +165,7 @@ function createWindow(options?: Electron.BrowserWindowConstructorOptions, callba
 
   mainWindow.on('closed', () => ((mainWindow as any) = null));
 
-  if (process.env.NODE_ENV !== 'testing' || process.env.TEST_ENV !== 'e2e') {
+  if (!isTesting) {
     // the first window
     if (lulumiStateSaveHandler === null) {
       // save app-state every 5 mins
@@ -256,7 +257,7 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (!is.macos) {
+  if (isTesting || !is.macos) {
     app.quit();
   }
 });
