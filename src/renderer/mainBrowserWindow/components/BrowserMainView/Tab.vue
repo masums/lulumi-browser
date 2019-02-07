@@ -92,13 +92,6 @@ export default class Tab extends Vue {
       viewId: this.viewId,
     });
   }
-  webviewHandler(fnName) {
-    return (event, origEvent, ...data) => {
-      if (this.$parent[fnName]) {
-        this.$parent[fnName](origEvent, this.tabIndex, this.tabId, ...data);
-      }
-    };
-  }
   findInPage() {
     if (this.hidden) {
       this.findinpage.start();
@@ -120,38 +113,6 @@ export default class Tab extends Vue {
     }
   }
 
-  beforeMount() {
-    const browserViewEvents = {
-      'did-start-loading': 'onDidStartLoading',
-      'load-commit': 'onLoadCommit',
-      'dom-ready': 'onDomReady',
-      'did-frame-finish-load': 'onDidFrameFinishLoad',
-      'page-favicon-updated': 'onPageFaviconUpdated',
-      'did-stop-loading': 'onDidStopLoading',
-      'did-fail-load': 'onDidFailLoad',
-      'did-finish-load': 'onDidFinishLoad',
-      'ipc-message': 'onIpcMessage',
-      'console-message': 'onConsoleMessage',
-      'update-target-url': 'onUpdateTargetUrl',
-      'media-started-playing': 'onMediaStartedPlaying',
-      'media-paused': 'onMediaPaused',
-      'enter-html-full-screen': 'onEnterHtmlFullScreen',
-      'leave-html-full-screen': 'onLeaveHtmlFullScreen',
-      'new-window': 'onNewWindow',
-      'scroll-touch-begin': 'onScrollTouchBegin',
-      'scroll-touch-end': 'onScrollTouchEnd',
-      'context-menu': 'onContextMenu',
-      'will-navigate': 'onWillNavigate',
-      'did-navigate': 'onDidNavigate',
-      'did-navigate-in-page': 'onDidNavigateInPage',
-    };
-
-    const ipc = this.$electron.ipcRenderer;
-
-    Object.keys(browserViewEvents).forEach((key) => {
-      ipc.on(key, this.webviewHandler(browserViewEvents[key]));
-    });
-  }
   mounted() {
     const webContents = this.$electron.remote.BrowserView.fromId(this.viewId).webContents;
     const ipc = this.$electron.ipcRenderer;

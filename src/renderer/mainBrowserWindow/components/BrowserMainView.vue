@@ -117,7 +117,7 @@ export default class BrowserMainView extends Vue {
         },
       );
     });
-     const windowProperties: any = this.$electron.ipcRenderer.sendSync('get-window-properties');
+    const windowProperties: any = this.$electron.ipcRenderer.sendSync('get-window-properties');
     windowProperties.forEach((windowProperty) => {
       recentlyClosed.push(
         {
@@ -129,14 +129,18 @@ export default class BrowserMainView extends Vue {
         },
       );
     });
-     recentlyClosed.sort((a, b) => (b.mtime - a.mtime))
+    recentlyClosed.sort((a, b) => (b.mtime - a.mtime))
       .map(m => delete m.mtime);
     if (recentlyClosed[0] !== undefined) {
       recentlyClosed[0].accelerator = 'CmdOrCtrl+Shift+T';
     }
-     return recentlyClosed;
+    return recentlyClosed;
   }
 
+  getInfoFromBrowserViewId(viewId: number): [number, number] {
+    const tabIndex = this.tabs.findIndex(tab => tab.viewId === viewId);
+    return [tabIndex, this.tabs[tabIndex].id];
+  }
   getBrowserView(tabIndex?: number): Electron.BrowserView {
     let index: number | undefined = tabIndex;
     if (index === undefined) {
@@ -274,7 +278,8 @@ export default class BrowserMainView extends Vue {
     }
   }
   // tabHandlers
-  onDidStartLoading(event: Electron.Event, tabIndex: number, tabId: number): void {
+  onDidStartLoading(viewId: number): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('didStartLoading', {
       tabId,
@@ -301,15 +306,11 @@ export default class BrowserMainView extends Vue {
       url: webContents.getURL(),
     });
   }
-  onLoadCommit(
-    event: Electron.LoadCommitEvent,
-    tabIndex: number,
-    tabId: number,
-    url: string,
-    isMainFrame: boolean): void {
+  onLoadCommit(viewId: number, url: string, isMainFrame: boolean): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     if (isMainFrame) {
       const navbar = (this.$refs.navbar as Navbar);
-      navbar.showUrl(event.url, tabId);
+      navbar.showUrl(url, tabId);
       this.$store.dispatch('loadCommit', {
         tabId,
         tabIndex,
@@ -317,7 +318,8 @@ export default class BrowserMainView extends Vue {
       });
     }
   }
-  onDomReady(event: Electron.Event, tabIndex: number, tabId: number): void {
+  onDomReady(viewId: number): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     const webContents = this.getBrowserView(tabIndex).webContents;
     const url = webContents.getURL();
     const parsedURL = urlPackage.parse(url, true);
@@ -372,10 +374,10 @@ export default class BrowserMainView extends Vue {
         this.getTabObject(tabIndex));
     }
   }
-  onDidFrameFinishLoad(
-    event: Electron.DidFrameFinishLoadEvent, tabIndex: number, tabId: number): void {
-    if (event.isMainFrame) {
-      const webContents = this.getBrowserView(tabIndex).webContents;
+  onDidFrameFinishLoad(viewId: number, isMainFrame: boolean): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
+    const webContents = this.getBrowserView(tabIndex).webContents;
+    if (isMainFrame) {
       this.$store.dispatch('didFrameFinishLoad', {
         tabId,
         tabIndex,
@@ -386,11 +388,8 @@ export default class BrowserMainView extends Vue {
       });
     }
   }
-  onPageFaviconUpdated(
-    event: Electron.PageFaviconUpdatedEvent,
-    tabIndex: number,
-    tabId: number,
-    favicons: string[]): void {
+  onPageFaviconUpdated(viewId: number, favicons: string[]): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     this.$store.dispatch('pageFaviconUpdated', {
       tabId,
       tabIndex,
@@ -407,7 +406,8 @@ export default class BrowserMainView extends Vue {
         this.getTabObject(tabIndex));
     }
   }
-  onDidStopLoading(event: Electron.Event, tabIndex: number, tabId: number): void {
+  onDidStopLoading(viewId: number): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('didStopLoading', {
       tabId,
@@ -419,15 +419,14 @@ export default class BrowserMainView extends Vue {
     });
   }
   onDidFailLoad(
-    event: Electron.DidFailLoadEvent,
-    tabIndex: number,
-    tabId: number,
+    viewId: number,
     errorCode: number,
     errorDescription: string,
     validatedURL: string,
     isMainFrame: boolean,
     frameProcessId: number,
     frameRoutingId: number): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('didFailLoad', {
       tabId,
@@ -457,17 +456,18 @@ export default class BrowserMainView extends Vue {
         `${errorPage}`);
     }
   }
-  onIpcMessage(event: Electron.IpcMessageEvent): void {
-    if (event.channel === 'newtab') {
+  onIpcMessage(viewId: number, channel: string): void {
+    const webContents = this.$electron.remote.BrowserView.fromId(viewId).webContents;
+    if (channel === 'newtab') {
       if (this.extensionService.newtabOverrides !== '') {
-        (event.target as Electron.WebviewTag).send('newtab', this.extensionService.newtabOverrides);
+        webContents.send('newtab', this.extensionService.newtabOverrides);
       } else {
-        (event.target as Electron.WebviewTag).send('newtab', '');
+        webContents.send('newtab', '');
       }
     }
   }
-  onUpdateTargetUrl(
-    event: Electron.UpdateTargetUrlEvent, tabIndex: number, tabId: number, url: string): void {
+  onUpdateTargetUrl(viewId: number, url: string): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     this.$store.dispatch('updateTargetUrl', {
       tabId,
       tabIndex,
@@ -475,7 +475,8 @@ export default class BrowserMainView extends Vue {
       windowId: this.windowId,
     });
   }
-  onMediaStartedPlaying(event: Electron.Event, tabIndex: number, tabId: number): void {
+  onMediaStartedPlaying(viewId: number): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     const webContents = this.getBrowserView(tabIndex).webContents;
     this.$store.dispatch('mediaStartedPlaying', {
       tabId,
@@ -484,7 +485,8 @@ export default class BrowserMainView extends Vue {
       windowId: this.windowId,
     });
   }
-  onMediaPaused(event: Electron.Event, tabIndex: number, tabId: number): void {
+  onMediaPaused(viewId: number): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     this.$store.dispatch('mediaPaused', {
       tabId,
       tabIndex,
@@ -538,21 +540,14 @@ export default class BrowserMainView extends Vue {
     }
   }
   onNewWindow(
-    event: Electron.NewWindowEvent,
-    tabIndex: number,
+    viewId: number,
     url: string,
     frameName: string,
     disposition: string,
     options: any,
     additionalFeatures: string[],
     referrer: Electron.Referrer): void {
-    if (disposition === 'new-window') {
-      event.preventDefault();
-      (event as any).newGuest = this.$electron.ipcRenderer.sendSync('new-lulumi-window', {
-        url,
-        follow: true,
-      });
-    } else if (disposition === 'foreground-tab') {
+    if (disposition === 'foreground-tab') {
       this.onNewTab(this.windowId, url, true);
     } else if (disposition === 'background-tab') {
       this.onNewTab(this.windowId, url, false);
@@ -752,18 +747,11 @@ export default class BrowserMainView extends Vue {
       this.$electron.remote.BrowserWindow.fromId(this.windowId).setFullScreen(false);
     }
   }
-  onContextMenu(
-    event: Electron.Event,
-    tabIndex: number,
-    tabId: number,
-    params: Electron.ContextMenuParams): void {
+  onContextMenu(viewId: number, params: Electron.ContextMenuParams): void {
     this.onWebviewContextMenu(params);
   }
-  onWillNavigate(
-    event: Electron.WillNavigateEvent,
-    tabIndex: number,
-    tabId: number,
-    url: string): void {
+  onWillNavigate(viewId: number, url: string): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     this.$store.dispatch('clearPageAction', {
       tabId,
       tabIndex,
@@ -779,18 +767,18 @@ export default class BrowserMainView extends Vue {
     });
   }
   onDidNavigate(
-    event: Electron.DidNavigateEvent,
-    tabIndex: number,
+    viewId: number,
     url: string,
     httpResponseCode: number,
     httpStatusText: string): void {
-    const webContents = this.getBrowserView().webContents;
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
+    const webContents = this.getBrowserView(tabIndex).webContents;
     this.onCompleted.emit({
       url,
+      tabId,
       frameId: 0,
       parentFrameId: -1,
       processId: webContents.getOSProcessId(),
-      tabId: this.getTabObject(tabIndex).id,
       timeStamp: Date.now(),
     });
   }
@@ -1706,6 +1694,37 @@ export default class BrowserMainView extends Vue {
     });
     ipc.on('get-history', (event: Electron.Event, webContentsId: number) => {
       this.onGetHistory(event, webContentsId);
+    });
+
+    // browserView events
+    const browserViewEvents = {
+      'did-start-loading': 'onDidStartLoading',
+      'load-commit': 'onLoadCommit',
+      'dom-ready': 'onDomReady',
+      'did-frame-finish-load': 'onDidFrameFinishLoad',
+      'page-favicon-updated': 'onPageFaviconUpdated',
+      'did-stop-loading': 'onDidStopLoading',
+      'did-fail-load': 'onDidFailLoad',
+      'did-finish-load': 'onDidFinishLoad',
+      'ipc-message': 'onIpcMessage',
+      'console-message': 'onConsoleMessage',
+      'update-target-url': 'onUpdateTargetUrl',
+      'media-started-playing': 'onMediaStartedPlaying',
+      'media-paused': 'onMediaPaused',
+      'enter-html-full-screen': 'onEnterHtmlFullScreen',
+      'leave-html-full-screen': 'onLeaveHtmlFullScreen',
+      'new-window': 'onNewWindow',
+      'context-menu': 'onContextMenu',
+      'will-navigate': 'onWillNavigate',
+      'did-navigate': 'onDidNavigate',
+      'did-navigate-in-page': 'onDidNavigateInPage',
+    };
+    Object.keys(browserViewEvents).forEach((key) => {
+      ipc.on(key, (event, viewId, ...data) => {
+        if (this[browserViewEvents[key]]) {
+          this[browserViewEvents[key]](viewId, ...data);
+        }
+      });
     });
 
     ipc.on('remove-non-bg-lulumi-extension', (event: Electron.Event, extensionId: string) => {

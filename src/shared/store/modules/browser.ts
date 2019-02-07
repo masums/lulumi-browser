@@ -121,9 +121,6 @@ const mutations = {
     const tabs = state.tabs.filter(tab => tab.windowId === windowId);
 
     if (tabs.length > tabIndex) {
-      if (process.type === 'renderer' && ipcRenderer) {
-        ipcRenderer.send('destroy-browser-view', state.tabs[tabsIndex].viewId);
-      }
       state.tabs.forEach((_, index) => {
         Vue.set(state.tabs[index], 'highlighted', false);
         Vue.set(state.tabs[index], 'active', false);
@@ -139,7 +136,12 @@ const mutations = {
       }
 
       if (tabs.length === 1) {
+        // delete the closed tab and destroy the corresponding browserView
+        if (process.type === 'renderer' && ipcRenderer) {
+          ipcRenderer.send('destroy-browser-view', state.tabs[tabsIndex].viewId);
+        }
         Vue.delete(state.tabs, tabsIndex);
+
         state.tabId += 1;
         state.tabs.push(createTabObject(state, windowId));
         Vue.set(state.tabs[state.tabs.length - 1], 'id', state.tabId);
@@ -151,9 +153,14 @@ const mutations = {
             badgeBackgroundColor: '',
           });
         });
+        Vue.set(state.currentTabIndexes, windowId, 0);
+
+        // highlight the tab and focus the corresoinding browserView
+        if (process.type === 'renderer' && ipcRenderer) {
+          ipcRenderer.send('focus-browser-view', state.tabs[state.tabs.length - 1].viewId);
+        }
         Vue.set(state.tabs[state.tabs.length - 1], 'highlighted', true);
         Vue.set(state.tabs[state.tabs.length - 1], 'active', true);
-        Vue.set(state.currentTabIndexes, windowId, 0);
       } else {
         // find the nearest adjacent tab to make active
         const tabsMapping = (tabs: Lulumi.Store.TabObject[], tabsOrder: number[]): number[] => {
@@ -172,19 +179,34 @@ const mutations = {
         const mapping = tabsMapping(tabs, state.tabsOrder[windowId]);
         const currentTabIndex = state.currentTabIndexes[windowId];
         if (currentTabIndex === tabIndex) {
+          // delete the closed tab and destroy the corresponding browserView
+          if (process.type === 'renderer' && ipcRenderer) {
+            ipcRenderer.send('destroy-browser-view', state.tabs[tabsIndex].viewId);
+          }
           Vue.delete(state.tabs, tabsIndex);
+
           for (let i = mapping[tabIndex] + 1; i < tabs.length; i += 1) {
             if (tabs[mapping.indexOf(i)]) {
               if (mapping.indexOf(i) > tabIndex) {
                 Vue.set(state.currentTabIndexes, windowId, mapping.indexOf(i) - 1);
+
+                // highlight the tab and focus the corresoinding browserView
                 const index: number
                   = state.tabs.findIndex(tab => (tab.id === state.tabs[mapping.indexOf(i) - 1].id));
+                if (process.type === 'renderer' && ipcRenderer) {
+                  ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
+                }
                 Vue.set(state.tabs[index], 'highlighted', true);
                 Vue.set(state.tabs[index], 'active', true);
               } else {
                 Vue.set(state.currentTabIndexes, windowId, mapping.indexOf(i));
+
+                // highlight the tab and focus the corresoinding browserView
                 const index: number
                   = state.tabs.findIndex(tab => (tab.id === state.tabs[mapping.indexOf(i)].id));
+                if (process.type === 'renderer' && ipcRenderer) {
+                  ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
+                }
                 Vue.set(state.tabs[index], 'highlighted', true);
                 Vue.set(state.tabs[index], 'active', true);
               }
@@ -195,14 +217,24 @@ const mutations = {
             if (tabs[mapping.indexOf(i)]) {
               if (mapping.indexOf(i) > tabIndex) {
                 Vue.set(state.currentTabIndexes, windowId, mapping.indexOf(i) - 1);
+
+                // highlight the tab and focus the corresoinding browserView
                 const index: number
                   = state.tabs.findIndex(tab => (tab.id === state.tabs[mapping.indexOf(i) - 1].id));
+                if (process.type === 'renderer' && ipcRenderer) {
+                  ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
+                }
                 Vue.set(state.tabs[index], 'highlighted', true);
                 Vue.set(state.tabs[index], 'active', true);
               } else {
                 Vue.set(state.currentTabIndexes, windowId, mapping.indexOf(i));
+
+                // highlight the tab and focus the corresoinding browserView
                 const index: number
                   = state.tabs.findIndex(tab => (tab.id === state.tabs[mapping.indexOf(i)].id));
+                if (process.type === 'renderer' && ipcRenderer) {
+                  ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
+                }
                 Vue.set(state.tabs[index], 'highlighted', true);
                 Vue.set(state.tabs[index], 'active', true);
               }
@@ -210,13 +242,27 @@ const mutations = {
             }
           }
         } else if (currentTabIndex > tabIndex) {
+          // delete the closed tab and destroy the corresponding browserView
+          if (process.type === 'renderer' && ipcRenderer) {
+            ipcRenderer.send('destroy-browser-view', state.tabs[tabsIndex].viewId);
+          }
           Vue.delete(state.tabs, tabsIndex);
+
           Vue.set(state.currentTabIndexes, windowId, currentTabIndex - 1);
+
+          // highlight the tab and focus the corresoinding browserView
           const index: number
             = state.tabs.findIndex(tab => (tab.id === state.tabs[currentTabIndex - 1].id));
+          if (process.type === 'renderer' && ipcRenderer) {
+            ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
+          }
           Vue.set(state.tabs[index], 'highlighted', true);
           Vue.set(state.tabs[index], 'active', true);
         } else {
+          // delete the closed tab and destroy the corresponding browserView
+          if (process.type === 'renderer' && ipcRenderer) {
+            ipcRenderer.send('destroy-browser-view', state.tabs[tabsIndex].viewId);
+          }
           Vue.delete(state.tabs, tabsIndex);
         }
       }
@@ -236,10 +282,18 @@ const mutations = {
           mtime: timeUtil.getMillisecondsTime(),
         });
       }
+      // delete the closed tab and destroy the corresponding browserView
+      if (process.type === 'renderer' && ipcRenderer) {
+        ipcRenderer.send('destroy-browser-view', state.tabs[index].viewId);
+      }
       Vue.delete(state.tabs, index);
     } else {
       state.tabs.forEach((tab, index) => {
         if (tab.windowId === windowId) {
+          // delete the closed tab and destroy the corresponding browserView
+          if (process.type === 'renderer' && ipcRenderer) {
+            ipcRenderer.send('destroy-browser-view', state.tabs[index].viewId);
+          }
           Vue.delete(state.tabs, index);
         }
       });
@@ -256,13 +310,14 @@ const mutations = {
     });
 
     Vue.set(state.currentTabIndexes, windowId, tabIndex);
-    const index: number = state.tabs.findIndex(tab => (tab.id === tabId));
-    Vue.set(state.tabs[index], 'highlighted', true);
-    Vue.set(state.tabs[index], 'active', true);
 
+    // highlight the tab and focus the corresoinding browserView
+    const index: number = state.tabs.findIndex(tab => (tab.id === tabId));
     if (process.type === 'renderer' && ipcRenderer) {
       ipcRenderer.send('focus-browser-view', state.tabs[index].viewId);
     }
+    Vue.set(state.tabs[index], 'highlighted', true);
+    Vue.set(state.tabs[index], 'active', true);
   },
   // tab handlers
   [types.DID_START_LOADING](state: Lulumi.Store.State, payload) {

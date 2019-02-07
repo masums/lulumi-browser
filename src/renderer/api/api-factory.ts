@@ -154,7 +154,7 @@ export default (vueInstance: any) => {
         webContents = vueInstance.$electron.remote.webContents.fromId(webContentsId);
       }
       const backgroundPages: Lulumi.API.BackgroundPages
-       = vueInstance.$electron.ipcRenderer.sendSync('get-background-pages');
+        = vueInstance.$electron.ipcRenderer.sendSync('get-background-pages');
       const extension = backgroundPages[extensionId];
       if (extension) {
         vueInstance.$electron.remote.webContents.fromId(extension.webContentsId)

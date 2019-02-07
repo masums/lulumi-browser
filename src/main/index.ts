@@ -393,42 +393,47 @@ ipcMain.on('set-browser-window-title', (event, data) => {
 });
 
 ipcMain.on('create-browser-view', (event, url) => {
-  const window: BrowserWindow = BrowserWindow.fromWebContents(event.sender);
-  const viewId = webContentsInit(window.id, url);
+  const browserWindow: BrowserWindow = BrowserWindow.fromWebContents(event.sender);
+  const viewId = webContentsInit(browserWindow.id, url);
 
-  window.webContents.executeJavaScript(`
+  browserWindow.webContents.executeJavaScript(`
     // initialization
-    window.addEventListener('resize', () => {
-      require('electron').ipcRenderer.send('set-browser-view-bounds', {
-        viewId: ${viewId},
-        x: 0,
-        y: document.getElementById('nav').getClientRects()[0].height,
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
+    require('electron').ipcRenderer.send('set-browser-view-bounds', {
+      x: 0,
+      y: document.getElementById('nav').getClientRects()[0].height,
+      width: window.innerWidth,
+      height: window.innerHeight,
     });
   `);
   browserViews[viewId] = BrowserView.fromId(viewId);
   event.returnValue = viewId;
 });
 
+// destroy the browserView
+// ref: https://github.com/electron/electron/issues/13581
 ipcMain.on('destroy-browser-view', (event, viewId) => {
+  BrowserWindow.fromWebContents(event.sender).setBrowserView((null as any));
   browserViews[viewId].destroy();
   delete browserViews[viewId];
 });
 
+// focus the browserView
 ipcMain.on('focus-browser-view', (event: Electron.Event, viewId) => {
   BrowserWindow.fromWebContents(event.sender).setBrowserView(browserViews[viewId]);
   browserViews[viewId].webContents.focus();
 });
 
 ipcMain.on('set-browser-view-bounds', (event, data) => {
-  BrowserView.fromId(data.viewId).setBounds({
-    x: data.x,
-    y: data.y,
-    width: data.width,
-    height: data.height - data.y + 1,
-  });
+  const browserWindow = BrowserWindow.fromWebContents(event.sender);
+  const browserView = browserWindow.getBrowserView();
+  if (browserView) {
+    browserView.setBounds({
+      x: data.x,
+      y: data.y,
+      width: data.width,
+      height: data.height - data.y + 1,
+    });
+  }
 });
 
 // make certain browserView to navigate to a page
@@ -673,17 +678,17 @@ ipcMain.on('get-manifest-map', (event) => {
   event.returnValue = lulumiExtension.manifestMap;
 });
 
- // get manifestNameMap
+// get manifestNameMap
 ipcMain.on('get-manifest-name-map', (event) => {
   event.returnValue = lulumiExtension.manifestNameMap;
 });
 
- // get backgroundPages
+// get backgroundPages
 ipcMain.on('get-background-pages', (event) => {
   event.returnValue = lulumiExtension.backgroundPages;
 });
 
- // get renderProcessPreferences
+// get renderProcessPreferences
 ipcMain.on('get-render-process-preferences', (event) => {
   event.returnValue = lulumiExtension.renderProcessPreferences;
 });

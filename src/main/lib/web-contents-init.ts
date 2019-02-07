@@ -2,11 +2,15 @@ import * as path from 'path';
 import {
   BrowserView,
   BrowserWindow,
+  ipcMain,
 } from 'electron';
 
 import constants from '../constants';
 
-function registerWebContentsEvents(windowId: number, webContents: Electron.WebContents) {
+function registerWebContentsEvents(
+  windowId: number,
+  webContents: Electron.WebContents,
+  viewId: number) {
   const browserViewEvents = {
     'did-start-loading': 'onDidStartLoading',
     'load-commit': 'onLoadCommit',
@@ -25,8 +29,6 @@ function registerWebContentsEvents(windowId: number, webContents: Electron.WebCo
     'enter-html-full-screen': 'onEnterHtmlFullScreen',
     'leave-html-full-screen': 'onLeaveHtmlFullScreen',
     'new-window': 'onNewWindow',
-    'scroll-touch-begin': 'onScrollTouchBegin',
-    'scroll-touch-end': 'onScrollTouchEnd',
     'context-menu': 'onContextMenu',
     'will-navigate': 'onWillNavigate',
     'did-navigate': 'onDidNavigate',
@@ -35,8 +37,28 @@ function registerWebContentsEvents(windowId: number, webContents: Electron.WebCo
 
   const window = BrowserWindow.fromId(windowId);
 
+  // special case
+  webContents.on('new-window', (event: Electron.NewWindowEvent, ...data) => {
+    if (data[2] === 'new-window') {
+      event.preventDefault();
+      (event as any).newGuest = (BrowserWindow as any).createWindow({
+        width: 800,
+        height: 500,
+        // tslint:disable-next-line:align
+      }, (eventName) => {
+        ipcMain.once(eventName, (event: Electron.Event) => {
+          webContents.send(eventName.substr(4), { url: data[0], follow: true });
+        });
+      });
+    } else {
+      window.webContents.send('new-window', viewId, ...data);
+    }
+  });
+
   Object.keys(browserViewEvents).forEach((key) => {
-    webContents.on((key as any), (event, ...data) => window.webContents.send(key, event, ...data));
+    webContents.on((key as any), (event, ...data) => {
+      window.webContents.send(key, viewId, ...data);
+    });
   });
 }
 
@@ -69,6 +91,6 @@ export default (windowId: number, url: string): number => {
   view.setBounds({ x: 0, y: 72, width: bounds[0], height: bounds[1] - 72 });
   webContents.loadURL(url);
 
-  registerWebContentsEvents(windowId, webContents);
+  registerWebContentsEvents(windowId, webContents, view.id);
   return view.id;
 };

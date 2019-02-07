@@ -135,7 +135,7 @@ const register = (storagePath: string, swipeGesture: boolean): void => {
       window.webContents.send('scroll-touch-edge');
     });
 
-    window.on('enter-full-screen', (event) => {
+    window.on('enter-full-screen', () => {
       window.webContents.send('enter-full-screen', isDarwin);
     });
     window.on('leave-full-screen', () => {
@@ -194,6 +194,17 @@ const register = (storagePath: string, swipeGesture: boolean): void => {
         event.preventDefault();
       }
     });
+
+    window.webContents.executeJavaScript(`
+      window.addEventListener('resize', () => {
+        require('electron').ipcRenderer.send('set-browser-view-bounds', {
+          x: 0,
+          y: document.getElementById('nav').getClientRects()[0].height,
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+      });
+    `);
 
     handleWindowProperty(window, 'create');
 
