@@ -58,6 +58,7 @@ declare namespace Lulumi {
       webContentsId: number;
     }
     export interface GlobalObject extends NodeJS.Global {
+      browserViews: Electron.BrowserView[];
       isOnline: boolean;
       __static: string;
       renderProcessPreferences: ManifestObject[];

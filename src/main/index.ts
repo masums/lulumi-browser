@@ -30,6 +30,7 @@ const { openProcessManager } = require('electron-process-manager');
 const isTesting = process.env.NODE_ENV === 'test';
 const startTime = new Date().getTime();
 const globalObject = global as Lulumi.API.GlobalObject;
+globalObject.browserViews = [];
 
 /*
  * Set `__static` path to static files in production
@@ -75,21 +76,33 @@ const { default: mainStore } = require('../shared/store/mainStore');
 mainStore.register(storagePath, swipeGesture);
 const store: Store<any> = mainStore.getStore();
 const windows: Electron.BrowserWindow[] = mainStore.getWindows();
-const browserViews: Electron.BrowserView[] = mainStore.getBrowserViews();
 let windowCount: number = 0;
 
 // ./api/lulumi-extension.ts
 const { default: lulumiExtension } = require('./api/lulumi-extension');
 
 function lulumiStateSave(soft: boolean = true): void {
+  windowCount = Object.keys(windows).length;
   if (!soft) {
-    windowCount = Object.keys(windows).length;
+    let count = 0;
     Object.keys(windows).forEach((key) => {
       const id = parseInt(key, 10);
       const window = windows[id];
+      window.once('closed', () => {
+        count += 1;
+        if (count === windowCount) {
+          if (setLanguage) {
+            mainStore.bumpWindowIds(windowCount);
+            windowCount = 0;
+          }
+        }
+      });
       window.close();
       window.removeAllListeners('close');
     });
+  }
+  if (setLanguage) {
+    return;
   }
   mainStore.saveLulumiState(soft)
     .then((state) => {
@@ -270,12 +283,6 @@ app.on('activate', () => {
 
 app.on('before-quit', (event: Electron.Event) => {
   if (shuttingDown) {
-    if (setLanguage) {
-      event.preventDefault();
-      shuttingDown = false;
-      mainStore.bumpWindowIds(windowCount);
-      windowCount = 0;
-    }
     return;
   }
   event.preventDefault();
@@ -405,7 +412,7 @@ ipcMain.on('create-browser-view', (event, url) => {
       height: window.innerHeight,
     });
   `);
-  browserViews[viewId] = BrowserView.fromId(viewId);
+  globalObject.browserViews[viewId] = BrowserView.fromId(viewId);
   event.returnValue = viewId;
 });
 
@@ -413,14 +420,14 @@ ipcMain.on('create-browser-view', (event, url) => {
 // ref: https://github.com/electron/electron/issues/13581
 ipcMain.on('destroy-browser-view', (event, viewId) => {
   BrowserWindow.fromWebContents(event.sender).setBrowserView((null as any));
-  browserViews[viewId].destroy();
-  delete browserViews[viewId];
+  globalObject.browserViews[viewId].destroy();
+  delete globalObject.browserViews[viewId];
 });
 
 // focus the browserView
 ipcMain.on('focus-browser-view', (event: Electron.Event, viewId) => {
-  BrowserWindow.fromWebContents(event.sender).setBrowserView(browserViews[viewId]);
-  browserViews[viewId].webContents.focus();
+  BrowserWindow.fromWebContents(event.sender).setBrowserView(globalObject.browserViews[viewId]);
+  globalObject.browserViews[viewId].webContents.focus();
 });
 
 ipcMain.on('set-browser-view-bounds', (event, data) => {
