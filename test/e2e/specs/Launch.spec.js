@@ -6,10 +6,10 @@ test.serial('has everything set up', async (t) => {
     .waitUntilWindowLoaded()
     .browserWindow;
 
-  expect(await app.client.getWindowCount()).to.equal(1);
   expect(await win.isMinimized()).to.equal(false);
   expect(await win.isDevToolsOpened()).to.equal(false);
   expect(await win.isVisible()).to.equal(true);
+  expect(await app.client.getWindowCount()).to.equal(1);
 
   const { width, height } = await win.getBounds();
   expect(width).to.above(0);
