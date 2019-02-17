@@ -35,14 +35,10 @@ const state: Lulumi.Store.State = {
 
 /* tslint:disable-next-line:max-line-length */
 function createTabObject(state: Lulumi.Store.State, wid: number, openUrl: string | null = null): Lulumi.Store.TabObject {
-  let viewId: number = -1;
-  if (process.type === 'renderer' && ipcRenderer) {
-    viewId = ipcRenderer.sendSync('create-browser-view', openUrl);
-  }
   return {
     webContentsId: -1,
     id: 0,
-    viewId,
+    viewId: -1,
     index: 0,
     windowId: wid,
     highlighted: false,
@@ -287,8 +283,9 @@ const mutations = {
         ipcRenderer.send('destroy-browser-view', state.tabs[index].viewId);
       } else if (process.type === 'browser') {
         const globalObject = global as Lulumi.API.GlobalObject;
-        require('electron').BrowserWindow.fromId(windowId).setBrowserView((null as any));
-        globalObject.browserViews[state.tabs[index].viewId].destroy();
+        const browserView = globalObject.browserViews[state.tabs[index].viewId];
+        require('electron').BrowserWindow.fromId(windowId).removeBrowserView(browserView);
+        browserView.destroy();
         delete globalObject.browserViews[state.tabs[index].viewId];
       }
       Vue.delete(state.tabs, index);
@@ -300,8 +297,9 @@ const mutations = {
             ipcRenderer.send('destroy-browser-view', state.tabs[index].viewId);
           } else if (process.type === 'browser') {
             const globalObject = global as Lulumi.API.GlobalObject;
-            require('electron').BrowserWindow.fromId(windowId).setBrowserView((null as any));
-            globalObject.browserViews[state.tabs[index].viewId].destroy();
+            const browserView = globalObject.browserViews[state.tabs[index].viewId];
+            require('electron').BrowserWindow.fromId(windowId).removeBrowserView(browserView);
+            browserView.destroy();
             delete globalObject.browserViews[state.tabs[index].viewId];
           }
           Vue.delete(state.tabs, index);
@@ -714,6 +712,19 @@ const mutations = {
     state.history = newState.history;
     state.lastOpenedTabs = newState.lastOpenedTabs;
     state.windows = newState.windows;
+  },
+  // set viewId
+  [types.SET_VIEW_ID](state: Lulumi.Store.State, payload) {
+    // const windowId: number = payload.windowId;
+    const tabId: number = payload.tabId;
+    // const tabIndex: number = payload.tabIndex;
+    const viewId: number = payload.viewId;
+
+    const tabsIndex = state.tabs.findIndex(tab => tab.id === tabId);
+
+    if (state.tabs[tabsIndex]) {
+      state.tabs[tabsIndex].viewId = viewId;
+    }
   },
   // window state
   [types.CREATE_WINDOW](state: Lulumi.Store.State, payload) {

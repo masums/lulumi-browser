@@ -127,6 +127,11 @@ function createWindow(options?: Electron.BrowserWindowConstructorOptions, callba
     minWidth: 320,
     minHeight: 500,
     titleBarStyle: 'hiddenInset',
+    webPreferences: {
+      contextIsolation: false,
+      nodeIntegration: true,
+      webviewTag: false,
+    },
   };
   if (options && Object.keys(options).length !== 0) {
     mainWindow = new BrowserWindow(Object.assign({}, defaultOption, options));
@@ -206,7 +211,10 @@ function createWindow(options?: Electron.BrowserWindowConstructorOptions, callba
 (BrowserWindow as any).createWindow = createWindow;
 
 // register 'lulumi://' and 'lulumi-extension://' as standard protocols that are secure
-protocol.registerStandardSchemes(['lulumi', 'lulumi-extension'], { secure: true });
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'lulumi', privileges: { standard: true, secure: true } },
+  { scheme: 'lulumi-extension', privileges: { standard: true, secure: true } },
+]);
 
 app.whenReady().then(() => {
   // autoUpdater
@@ -395,15 +403,45 @@ ipcMain.on('create-browser-view', (event, url) => {
 // destroy the browserView
 // ref: https://github.com/electron/electron/issues/13581
 ipcMain.on('destroy-browser-view', (event, viewId) => {
-  BrowserWindow.fromWebContents(event.sender).setBrowserView((null as any));
-  globalObject.browserViews[viewId].destroy();
-  delete globalObject.browserViews[viewId];
+  if (viewId !== -1) {
+    const browserView = globalObject.browserViews[viewId];
+    BrowserWindow.fromWebContents(event.sender).removeBrowserView(browserView);
+    browserView.destroy();
+    delete globalObject.browserViews[viewId];
+  }
 });
 
 // focus the browserView
 ipcMain.on('focus-browser-view', (event: Electron.Event, viewId) => {
-  BrowserWindow.fromWebContents(event.sender).setBrowserView(globalObject.browserViews[viewId]);
-  globalObject.browserViews[viewId].webContents.focus();
+  if (viewId !== -1) {
+    const browserWindow = BrowserWindow.fromWebContents(event.sender);
+    const browserView = globalObject.browserViews[viewId];
+    try {
+      const attached = browserWindow.getBrowserView();
+      if (attached) {
+        if (attached.id === viewId) {
+          return;
+        }
+        browserWindow.removeBrowserView(attached);
+      }
+      browserWindow.addBrowserView(browserView);
+    } catch (err) {
+      console.error('Multiple BrowserViews is attached.');
+      ((browserWindow.getBrowserViews() as unknown) as Electron.BrowserView[])
+        .forEach(view => browserWindow.removeBrowserView(view));
+      browserWindow.addBrowserView(browserView);
+    } finally {
+      browserWindow.webContents.executeJavaScript(`
+        // initialization
+        require('electron').ipcRenderer.send('set-browser-view-bounds', {
+          x: 0,
+          y: document.getElementById('nav').getClientRects()[0].height,
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+      `);
+    }
+  }
 });
 
 ipcMain.on('set-browser-view-bounds', (event, data) => {

@@ -18,7 +18,7 @@ export default class Newtab extends Vue {
           document.location.href = newtab;
         }
       });
-      ipcRenderer.sendToHost('newtab');
+      ipcRenderer.send('newtab');
     }
   }
 }

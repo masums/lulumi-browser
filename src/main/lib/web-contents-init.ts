@@ -87,7 +87,7 @@ export default (windowId: number, url: string): number => {
     webPreferences,
   });
   const webContents = view.webContents;
-  window.setBrowserView(view);
+  view.setBackgroundColor('#ececec');
   view.setBounds({ x: 0, y: 72, width: bounds[0], height: bounds[1] - 72 });
   webContents.loadURL(url);
 

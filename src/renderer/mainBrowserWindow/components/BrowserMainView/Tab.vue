@@ -46,10 +46,6 @@ import Notification from './Notification.vue';
       type: Number,
       required: true,
     },
-    viewId: {
-      type: Number,
-      required: true,
-    },
   },
   components: {
     Notification,
@@ -66,7 +62,6 @@ export default class Tab extends Vue {
   windowWebContentsId: number;
   tabIndex: number;
   tabId: number;
-  viewId: number;
 
   findinpage: Lulumi.Tab.FindInPageObject;
 
@@ -84,6 +79,9 @@ export default class Tab extends Vue {
       return this.dummyTabObject;
     }
     return this.tabs[this.tabIndex];
+  }
+  get viewId(): number {
+    return this.tab.viewId;
   }
 
   navigateTo(url) {
@@ -109,145 +107,168 @@ export default class Tab extends Vue {
   @Watch('isActive')
   onIsActive(newState: string): void {
     if (newState && !this.hidden) {
-      this.$nextTick(() => (this.$refs.findinpageInput as HTMLInputElement).focus());
+      (this.$refs.findinpageInput as HTMLInputElement).focus();
     }
   }
+  @Watch('viewId')
+  onViewId(newState: number): void {
+    if (newState !== -1) {
+      const browserView = this.$electron.remote.BrowserView.fromId(this.viewId);
+      const webContents = browserView.webContents;
+      const ipc = this.$electron.ipcRenderer;
 
-  mounted() {
-    const webContents = this.$electron.remote.BrowserView.fromId(this.viewId).webContents;
-    const ipc = this.$electron.ipcRenderer;
-
-    ipc.on('reset-zoom', () => {
-      webContents.setZoomLevel(0);
-    });
-    ipc.on('zoom-in', () => {
-      webContents.getZoomLevel((zoomLevel) => {
-        webContents.setZoomLevel(zoomLevel + 0.5);
+      ipc.on('reset-zoom', () => {
+        webContents.setZoomLevel(0);
       });
-    });
-    ipc.on('zoom-out', () => {
-      webContents.getZoomLevel((zoomLevel) => {
-        webContents.setZoomLevel(zoomLevel - 0.5);
+      ipc.on('zoom-in', () => {
+        webContents.setZoomLevel(webContents.getZoomLevel() + 0.5);
       });
-    });
+      ipc.on('zoom-out', () => {
+        webContents.setZoomLevel(webContents.getZoomLevel() - 0.5);
+      });
 
-    this.findinpage = {
-      input: this.$refs.findinpageInput,
-      counter: this.$refs.findinpageCount,
-      previous: this.$refs.findinpagePreviousMatch,
-      next: this.$refs.findinpageNextMatch,
-      endButton: this.$refs.findinpageEnd,
-      activeWebContents: webContents,
-      start: () => {
-        this.findinpage.counter.textContent = '';
-        this.hidden = false;
-        this.$nextTick(() => {
-          this.findinpage.input.focus();
-          (this.findinpage.input as HTMLInputElement).select();
-        });
+      this.findinpage = {
+        input: this.$refs.findinpageInput,
+        counter: this.$refs.findinpageCount,
+        previous: this.$refs.findinpagePreviousMatch,
+        next: this.$refs.findinpageNextMatch,
+        endButton: this.$refs.findinpageEnd,
+        activeWebContents: webContents,
+        start: () => {
+          this.findinpage.counter.textContent = '';
+          this.hidden = false;
+          this.$nextTick(() => {
+            this.findinpage.input.focus();
+            (this.findinpage.input as HTMLInputElement).select();
+          });
 
+          if ((this.findinpage.input as HTMLInputElement).value) {
+            this.requestId = this.findinpage.activeWebContents.findInPage(
+              (this.findinpage.input as HTMLInputElement).value);
+          }
+        },
+        end: () => {
+          this.hidden = true;
+
+          this.$nextTick(() => {
+            if (this.findinpage.activeWebContents) {
+              this.findinpage.activeWebContents.stopFindInPage('keepSelection');
+              if (this.findinpage.input === document.activeElement) {
+                this.findinpage.activeWebContents.focus();
+              }
+            }
+          });
+        },
+      } as any;
+
+      this.findinpage.endButton.addEventListener('click', () => {
+        this.findinpage.end();
+      });
+
+      this.findinpage.input.addEventListener('input', (event) => {
+        if ((event.target as HTMLInputElement).value) {
+          this.requestId = this.findinpage.activeWebContents.findInPage(
+            (event.target as HTMLInputElement).value);
+        }
+      });
+
+      this.findinpage.input.addEventListener('keypress', (event) => {
+        if (event.keyCode === 13) {
+          this.requestId = this.findinpage.activeWebContents.findInPage(
+            (this.findinpage.input as HTMLInputElement).value, {
+              forward: true,
+              findNext: true,
+            });
+        }
+      });
+
+      this.findinpage.previous.addEventListener('click', () => {
         if ((this.findinpage.input as HTMLInputElement).value) {
           this.requestId = this.findinpage.activeWebContents.findInPage(
-            (this.findinpage.input as HTMLInputElement).value);
+            (this.findinpage.input as HTMLInputElement).value, {
+              forward: false,
+              findNext: true,
+            });
         }
-      },
-      end: () => {
-        this.hidden = true;
+      });
 
-        this.$nextTick(() => {
-          if (this.findinpage.activeWebContents) {
-            this.findinpage.activeWebContents.stopFindInPage('keepSelection');
-            if (this.findinpage.input === document.activeElement) {
-              this.findinpage.activeWebContents.focus();
+      this.findinpage.next.addEventListener('click', () => {
+        if ((this.findinpage.input as HTMLInputElement).value) {
+          this.requestId
+            = this.findinpage.activeWebContents.findInPage(
+              (this.findinpage.input as HTMLInputElement).value,
+              { forward: true, findNext: true });
+        }
+      });
+
+      webContents.on('found-in-page', (event: Electron.FoundInPageEvent) => {
+        if (event.result.requestId === this.requestId) {
+          // for this.$tc pluralization
+          let match;
+          if (event.result.matches !== undefined) {
+            if (event.result.matches === 0) {
+              match = 1;
+            } else {
+              match = 2;
             }
+            this.findinpage.counter.textContent
+              = `${this.$t(
+                'tab.findInPage.status', {
+                  activeMatch: event.result.activeMatchOrdinal,
+                  matches: event.result.matches,
+                })} ${this.$tc('tab.findInPage.match', match)}`;
           }
-        });
-      },
-    } as any;
-
-    this.findinpage.endButton.addEventListener('click', () => {
-      this.findinpage.end();
-    });
-
-    this.findinpage.input.addEventListener('input', (event) => {
-      if ((event.target as HTMLInputElement).value) {
-        this.requestId = this.findinpage.activeWebContents.findInPage(
-          (event.target as HTMLInputElement).value);
-      }
-    });
-
-    this.findinpage.input.addEventListener('keypress', (event) => {
-      if (event.keyCode === 13) {
-        this.requestId = this.findinpage.activeWebContents.findInPage(
-          (this.findinpage.input as HTMLInputElement).value, {
-            forward: true,
-            findNext: true,
-          });
-      }
-    });
-
-    this.findinpage.previous.addEventListener('click', () => {
-      if ((this.findinpage.input as HTMLInputElement).value) {
-        this.requestId = this.findinpage.activeWebContents.findInPage(
-          (this.findinpage.input as HTMLInputElement).value, {
-            forward: false,
-            findNext: true,
-          });
-      }
-    });
-
-    this.findinpage.next.addEventListener('click', () => {
-      if ((this.findinpage.input as HTMLInputElement).value) {
-        this.requestId
-          = this.findinpage.activeWebContents.findInPage(
-            (this.findinpage.input as HTMLInputElement).value,
-            { forward: true, findNext: true });
-      }
-    });
-
-    webContents.on('found-in-page', (event: Electron.FoundInPageEvent) => {
-      if (event.result.requestId === this.requestId) {
-        // for this.$tc pluralization
-        let match;
-        if (event.result.matches !== undefined) {
-          if (event.result.matches === 0) {
-            match = 1;
-          } else {
-            match = 2;
-          }
-          this.findinpage.counter.textContent
-            = `${this.$t(
-              'tab.findInPage.status', {
-                activeMatch: event.result.activeMatchOrdinal,
-                matches: event.result.matches,
-              })} ${this.$tc('tab.findInPage.match', match)}`;
         }
-      }
-    });
+      });
 
-    const nav = this.$parent.$refs.nav as HTMLDivElement;
-    const findinpageBar = this.$refs.findinpageBar as HTMLDivElement;
-    if (nav && findinpageBar) {
-      /*
-        * register the resize event on nav element to dynamically adjust
-        * the height of webview element
-        */
-      /*
-      new resizeSensor(nav, () => {
+      const nav = this.$parent.$refs.nav as HTMLDivElement;
+      const findinpageBar = this.$refs.findinpageBar as HTMLDivElement;
+      if (nav && findinpageBar) {
+        /*
+          * register the resize event on nav element to dynamically adjust
+          * the height of webview element
+          */
+        /*
+        new resizeSensor(nav, () => {
+          webview.style.height
+            = `calc(100vh - ${nav.clientHeight}px)`;
+          findinpageBar.style.top = `${nav.clientHeight}px`;
+        });
+
+        // fired once
         webview.style.height
           = `calc(100vh - ${nav.clientHeight}px)`;
         findinpageBar.style.top = `${nav.clientHeight}px`;
-      });
+        */
+      }
 
-      // fired once
-      webview.style.height
-        = `calc(100vh - ${nav.clientHeight}px)`;
-      findinpageBar.style.top = `${nav.clientHeight}px`;
-      */
-
-      // navigate
-      this.navigateTo(this.tab.url);
+      if (this.isActive) {
+        this.$electron.ipcRenderer.send('focus-browser-view', this.viewId);
+        // a work around for https://github.com/electron/electron/issues/14038
+        // ref: https://github.com/minbrowser/min/blob/3c74ce6/js/webviews.js#L25-L35
+        setTimeout(
+          () => {
+            const d = document.createElement('div');
+            d.setAttribute('style', '-webkit-app-region:drag; width: 1px; height: 1px;');
+            document.body.appendChild(d);
+            setTimeout(
+              () => {
+                document.body.removeChild(d);
+              },
+              100);
+          },
+          100);
+      }
     }
+  }
+
+  beforeMount() {
+    this.$store.dispatch('setViewId', {
+      windowId: this.windowId,
+      tabId: this.tabId,
+      tabIndex: this.tabIndex,
+      viewId: this.$electron.ipcRenderer.sendSync('create-browser-view', this.tab.url),
+    });
   }
 }
 </script>

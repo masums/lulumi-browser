@@ -240,6 +240,9 @@ export const actions = {
   setLulumiState({ commit }, newState) {
     commit(types.SET_LULUMI_STATE, { newState });
   },
+  setViewId({ commit }, { windowId, tabId, tabIndex, viewId }) {
+    commit(types.SET_VIEW_ID, { windowId, tabId, tabIndex, viewId });
+  },
 
   createWindow({ commit }, { windowId, width, height, left, top, windowState, type }) {
     commit(types.CREATE_WINDOW, {

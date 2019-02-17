@@ -12,7 +12,7 @@
       "smartStep": true,
       "sourceMaps": true,
       "protocol": "inspector",
-      "port": 9222,
+      "port": 9229,
       "timeout": 20000
     }
   ]

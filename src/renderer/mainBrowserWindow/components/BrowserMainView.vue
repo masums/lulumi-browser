@@ -10,7 +10,6 @@ div
       :windowWebContentsId="windowWebContentsId",
       :tabIndex="index",
       :tabId="tab.id",
-      :viewId="tab.viewId",
       :ref="`tab-${index}`",
       :key="`tab-${tab.id}`")
   #footer
@@ -324,8 +323,6 @@ export default class BrowserMainView extends Vue {
   onLoadCommit(viewId: number, url: string, isMainFrame: boolean): void {
     const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     if (isMainFrame) {
-      const navbar = (this.$refs.navbar as Navbar);
-      navbar.showUrl(url, tabId);
       this.$store.dispatch('loadCommit', {
         tabId,
         tabIndex,
@@ -472,12 +469,15 @@ export default class BrowserMainView extends Vue {
     }
   }
   onIpcMessage(viewId: number, channel: string): void {
+    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
     const webContents = this.$electron.remote.BrowserView.fromId(viewId).webContents;
     if (channel === 'newtab') {
+      const navbar = (this.$refs.navbar as Navbar);
       if (this.extensionService.newtabOverrides !== '') {
         webContents.send('newtab', this.extensionService.newtabOverrides);
       } else {
         webContents.send('newtab', '');
+        navbar.showUrl(this.getTabObject(tabIndex).url, tabId);
       }
     }
   }
