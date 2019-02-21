@@ -16,7 +16,7 @@ const state: Lulumi.Store.State = {
   tabId: 0,
   tabs: [],
   tabsOrder: [],
-  currentTabIndexes: [],
+  currentTabIndexes: [0],
   searchEngine: constants.searchEngine,
   currentSearchEngine: constants.currentSearchEngine,
   autoFetch: constants.autoFetch,
