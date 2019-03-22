@@ -529,16 +529,12 @@ export default class BrowserMainView extends Vue {
     }
   }
   onEnterHtmlFullScreen(): void {
-    const nav = this.$el.querySelector('#nav') as HTMLDivElement;
-    if (nav) {
-      nav.style.display = 'none';
-      // this.getBrowserView().style.height = '100vh';
-    }
     this.$electron.remote.BrowserWindow.fromId(this.windowId).setFullScreen(true);
     this.htmlFullscreen = true;
   }
   onLeaveHtmlFullScreen(): void {
     if (this.htmlFullscreen) {
+      this.htmlFullscreen = false;
       const webContents = this.getBrowserView().webContents;
       const nav = this.$el.querySelector('#nav') as HTMLDivElement;
       if (nav) {
@@ -551,7 +547,6 @@ export default class BrowserMainView extends Vue {
       if (is.macos) {
         this.$electron.remote.BrowserWindow.fromId(this.windowId).setSimpleFullScreen(false);
       }
-      this.htmlFullscreen = false;
     }
   }
   onNewWindow(
@@ -753,12 +748,22 @@ export default class BrowserMainView extends Vue {
   }
   onEnterFullscreen(isDarwin: boolean): void {
     document.body.classList.add('fullscreen');
+    const nav = this.$el.querySelector('#nav') as HTMLDivElement;
+    if (nav) {
+      nav.style.display = 'none';
+      // this.getBrowserView().style.height = '100vh';
+    }
   }
   onLeaveFullscreen(isDarwin: boolean): void {
     document.body.classList.remove('fullscreen');
+    const nav = this.$el.querySelector('#nav') as HTMLDivElement;
+    if (nav) {
+      nav.style.display = 'block';
+      // this.getBrowserView().style.height = `calc(100vh - ${nav.clientHeight}px)`;
+    }
     if (this.htmlFullscreen) {
       this.onLeaveHtmlFullScreen();
-    } else {
+    } else if (this.$electron.remote.BrowserWindow.fromId(this.windowId).isFullScreen()) {
       this.$electron.remote.BrowserWindow.fromId(this.windowId).setFullScreen(false);
     }
   }
