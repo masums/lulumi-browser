@@ -10,6 +10,7 @@ declare module 'vue/types/vue' {
   }
   interface Remote extends Electron.Remote {
     BrowserWindow: BrowserWindow & typeof Electron.BrowserWindow;
+    BrowserView: typeof Electron.BrowserView;
   }
   interface MyElectron {
     clipboard: Electron.Clipboard;

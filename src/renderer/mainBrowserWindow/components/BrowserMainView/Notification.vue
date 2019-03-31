@@ -123,9 +123,10 @@ export default class Notification extends Vue {
     ipc.on('request-permission', (event, data) => {
       const webContents: Electron.webContents | null
         = this.$electron.remote.webContents.fromId(data.webContentsId);
-      if (webContents && webContents.hostWebContents.id === this.windowWebContentsId) {
-        if (((this.$parent as Tab).$refs.webview as Electron.WebviewTag)
-        .getWebContents().id === data.webContentsId) {
+      const browserView = this.$electron.remote.BrowserView.fromWebContents(webContents);
+      if (webContents && browserView) {
+        const browserWindow = this.$electron.remote.BrowserWindow.fromBrowserView(browserView);
+        if (browserWindow && browserWindow.webContents.id === this.windowWebContentsId) {
           const webview = this.$parent.$refs.webview as Electron.WebviewTag;
           this.id = data.webContentsId;
           this.hostname = urlUtil.getHostname(webContents.getURL());
