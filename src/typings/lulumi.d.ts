@@ -178,6 +178,8 @@ declare namespace Lulumi {
       pdfViewer: string;
       tabConfig: TabConfig;
       lang: string;
+      proxyConfig: Electron.Config;
+      auth: { username: string, password: string };
       downloads: DownloadItem[];
       history: TabHistory[];
       permissions: object;
