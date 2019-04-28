@@ -925,6 +925,7 @@ export default class BrowserMainView extends Vue {
           follow: true,
           url: urlResource.aboutUrls(url),
         });
+        this.$electron.ipcRenderer.send('focus-window', this.windowId);
       } else {
         this.$store.dispatch('createTab', {
           windowId,
