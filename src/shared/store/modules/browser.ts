@@ -53,6 +53,7 @@ function createTabObject(state: Lulumi.Store.State, wid: number, openUrl: string
     incognito: false,
     statusText: false,
     isLoading: false,
+    didNavigate: false,
     isSearching: false,
     canGoBack: false,
     canGoForward: false,
@@ -344,6 +345,7 @@ const mutations = {
       state.tabs[tabsIndex].url = url;
       state.tabs[tabsIndex].title = url;
       state.tabs[tabsIndex].isLoading = true;
+      state.tabs[tabsIndex].didNavigate = false;
       state.tabs[tabsIndex].status = 'loading';
       state.tabs[tabsIndex].error = false;
 
@@ -358,7 +360,7 @@ const mutations = {
       });
     }
   },
-  [types.LOAD_COMMIT](state: Lulumi.Store.State, payload) {
+  [types.DID_NAVIGATE](state: Lulumi.Store.State, payload) {
     // const windowId: number = payload.windowId;
     const tabId: number = payload.tabId;
     // const tabIndex: number = payload.tabIndex;
@@ -366,6 +368,7 @@ const mutations = {
     const tabsIndex = state.tabs.findIndex(tab => tab.id === tabId);
 
     if (state.tabs[tabsIndex]) {
+      state.tabs[tabsIndex].didNavigate = true;
       state.tabs[tabsIndex].hasMedia = false;
     }
   },

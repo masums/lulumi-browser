@@ -70,6 +70,7 @@ const tabConfig: Lulumi.Store.TabConfig = {
     incognito: false,
     statusText: false,
     isLoading: false,
+    didNavigate: false,
     isSearching: false,
     canGoBack: false,
     canGoForward: false,

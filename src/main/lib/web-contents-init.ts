@@ -13,7 +13,7 @@ function registerWebContentsEvents(
   viewId: number) {
   const browserViewEvents = {
     'did-start-loading': 'onDidStartLoading',
-    'load-commit': 'onLoadCommit',
+    'did-navigate': 'onDidNavigate',
     'page-title-set': 'onPageTitleSet',
     'dom-ready': 'onDomReady',
     'did-frame-finish-load': 'onDidFrameFinishLoad',
@@ -31,7 +31,6 @@ function registerWebContentsEvents(
     'new-window': 'onNewWindow',
     'context-menu': 'onContextMenu',
     'will-navigate': 'onWillNavigate',
-    'did-navigate': 'onDidNavigate',
     'did-navigate-in-page': 'onDidNavigateInPage',
   };
 

@@ -323,15 +323,26 @@ export default class BrowserMainView extends Vue {
       url: webContents.getURL(),
     });
   }
-  onLoadCommit(viewId: number, url: string, isMainFrame: boolean): void {
+  onDidNavigate(
+    viewId: number,
+    url: string,
+    httpResponseCode: number,
+    httpStatusText: string): void {
     const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
-    if (isMainFrame) {
-      this.$store.dispatch('loadCommit', {
-        tabId,
-        tabIndex,
-        windowId: this.windowId,
-      });
-    }
+    const webContents = this.getBrowserView(tabIndex).webContents;
+    this.$store.dispatch('didNavigate', {
+      tabId,
+      tabIndex,
+      windowId: this.windowId,
+    });
+    this.onCompleted.emit({
+      url,
+      tabId,
+      frameId: 0,
+      parentFrameId: -1,
+      processId: webContents.getOSProcessId(),
+      timeStamp: Date.now(),
+    });
   }
   onDomReady(viewId: number): void {
     const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
@@ -794,22 +805,6 @@ export default class BrowserMainView extends Vue {
       tabId: this.getTabObject(tabIndex).id,
       frameId: 0,
       parentFrameId: -1,
-      timeStamp: Date.now(),
-    });
-  }
-  onDidNavigate(
-    viewId: number,
-    url: string,
-    httpResponseCode: number,
-    httpStatusText: string): void {
-    const [tabIndex, tabId] = this.getInfoFromBrowserViewId(viewId);
-    const webContents = this.getBrowserView(tabIndex).webContents;
-    this.onCompleted.emit({
-      url,
-      tabId,
-      frameId: 0,
-      parentFrameId: -1,
-      processId: webContents.getOSProcessId(),
       timeStamp: Date.now(),
     });
   }
@@ -1771,7 +1766,7 @@ export default class BrowserMainView extends Vue {
     // browserView events
     const browserViewEvents = {
       'did-start-loading': 'onDidStartLoading',
-      'load-commit': 'onLoadCommit',
+      'did-navigate': 'onDidNavigate',
       'dom-ready': 'onDomReady',
       'did-frame-finish-load': 'onDidFrameFinishLoad',
       'page-favicon-updated': 'onPageFaviconUpdated',
@@ -1788,7 +1783,6 @@ export default class BrowserMainView extends Vue {
       'new-window': 'onNewWindow',
       'context-menu': 'onContextMenu',
       'will-navigate': 'onWillNavigate',
-      'did-navigate': 'onDidNavigate',
       'did-navigate-in-page': 'onDidNavigateInPage',
     };
     Object.keys(browserViewEvents).forEach((key) => {
